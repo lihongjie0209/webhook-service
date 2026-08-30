@@ -1,0 +1,706 @@
+basePath: /
+definitions:
+  buildinfo.Info:
+    properties:
+      build_time:
+        type: string
+      commit:
+        type: string
+      started_at:
+        type: string
+      uptime:
+        type: string
+      version:
+        type: string
+    type: object
+  health.Dependency:
+    properties:
+      latency:
+        type: string
+      status:
+        type: string
+    type: object
+  health.Status:
+    properties:
+      dependencies:
+        additionalProperties:
+          $ref: '#/definitions/health.Dependency'
+        type: object
+      status:
+        type: string
+    type: object
+  httptransport.CreateSubscriptionBody:
+    properties:
+      signing_secret:
+        type: string
+      subscription:
+        $ref: '#/definitions/httptransport.SubscriptionBody'
+    type: object
+  httptransport.CreateSubscriptionRequest:
+    properties:
+      application_id:
+        type: string
+      endpoint_url:
+        example: https://hooks.example.com/events
+        type: string
+      max_attempts:
+        example: 5
+        type: integer
+      name:
+        type: string
+      retry_initial_seconds:
+        example: 5
+        type: integer
+      subject_filter:
+        example: platform.identity.user.>
+        type: string
+      tenant_id:
+        type: string
+      timeout_ms:
+        example: 5000
+        type: integer
+    required:
+    - endpoint_url
+    - name
+    - subject_filter
+    - tenant_id
+    type: object
+  httptransport.DeliveryBody:
+    properties:
+      attempt_count:
+        type: integer
+      created_at:
+        type: string
+      created_by:
+        type: string
+      delivered_at:
+        type: string
+      error_message:
+        type: string
+      event_id:
+        type: string
+      event_subject:
+        type: string
+      id:
+        type: string
+      last_attempt_at:
+        type: string
+      next_attempt_at:
+        type: string
+      response_body:
+        type: string
+      response_status:
+        type: integer
+      status:
+        type: string
+      subscription_id:
+        type: string
+      tenant_id:
+        type: string
+      updated_at:
+        type: string
+      updated_by:
+        type: string
+      version:
+        type: integer
+    type: object
+  httptransport.DeliveryPageBody:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/httptransport.DeliveryBody'
+        type: array
+      page:
+        $ref: '#/definitions/httptransport.PageResult'
+    type: object
+  httptransport.ListDeliveriesRequest:
+    properties:
+      created_from:
+        example: "2026-08-01T00:00:00+08:00"
+        type: string
+      created_until:
+        example: "2026-09-01T00:00:00+08:00"
+        type: string
+      page:
+        $ref: '#/definitions/httptransport.PageRequest'
+      status:
+        enum:
+        - pending
+        - processing
+        - succeeded
+        - retrying
+        - dead
+        type: string
+      subscription_id:
+        type: string
+      tenant_id:
+        type: string
+    required:
+    - tenant_id
+    type: object
+  httptransport.ListSubscriptionsRequest:
+    properties:
+      application_id:
+        type: string
+      page:
+        $ref: '#/definitions/httptransport.PageRequest'
+      search:
+        type: string
+      status:
+        enum:
+        - active
+        - paused
+        - disabled
+        type: string
+      tenant_id:
+        type: string
+    required:
+    - tenant_id
+    type: object
+  httptransport.MeResponseBody:
+    properties:
+      subject:
+        type: string
+    type: object
+  httptransport.PageRequest:
+    properties:
+      page:
+        example: 1
+        type: integer
+      page_size:
+        example: 20
+        type: integer
+    type: object
+  httptransport.PageResult:
+    properties:
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  httptransport.ResourceRequest:
+    properties:
+      id:
+        type: string
+      tenant_id:
+        type: string
+    required:
+    - id
+    - tenant_id
+    type: object
+  httptransport.Response:
+    properties:
+      body: {}
+      code:
+        type: integer
+      message:
+        type: string
+      request_id:
+        type: string
+    type: object
+  httptransport.RotateSecretBody:
+    properties:
+      signing_secret:
+        type: string
+      subscription:
+        $ref: '#/definitions/httptransport.SubscriptionBody'
+    type: object
+  httptransport.SubscriptionBody:
+    properties:
+      application_id:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: string
+      endpoint_url:
+        type: string
+      id:
+        type: string
+      max_attempts:
+        type: integer
+      name:
+        type: string
+      retry_initial_seconds:
+        type: integer
+      secret_version:
+        type: integer
+      status:
+        type: string
+      subject_filter:
+        type: string
+      tenant_id:
+        type: string
+      timeout_ms:
+        type: integer
+      updated_at:
+        type: string
+      updated_by:
+        type: string
+      version:
+        type: integer
+    type: object
+  httptransport.SubscriptionPageBody:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/httptransport.SubscriptionBody'
+        type: array
+      page:
+        $ref: '#/definitions/httptransport.PageResult'
+    type: object
+  httptransport.TestSubscriptionRequest:
+    properties:
+      id:
+        type: string
+      payload_json:
+        type: object
+      tenant_id:
+        type: string
+    required:
+    - id
+    - payload_json
+    - tenant_id
+    type: object
+  httptransport.UpdateSubscriptionRequest:
+    properties:
+      endpoint_url:
+        type: string
+      expected_version:
+        type: integer
+      id:
+        type: string
+      max_attempts:
+        type: integer
+      name:
+        type: string
+      retry_initial_seconds:
+        type: integer
+      status:
+        enum:
+        - active
+        - paused
+        - disabled
+        type: string
+      subject_filter:
+        type: string
+      tenant_id:
+        type: string
+      timeout_ms:
+        type: integer
+    required:
+    - endpoint_url
+    - expected_version
+    - id
+    - max_attempts
+    - name
+    - retry_initial_seconds
+    - status
+    - subject_filter
+    - tenant_id
+    - timeout_ms
+    type: object
+  httptransport.VersionedResourceRequest:
+    properties:
+      expected_version:
+        type: integer
+      id:
+        type: string
+      tenant_id:
+        type: string
+    required:
+    - expected_version
+    - id
+    - tenant_id
+    type: object
+info:
+  contact: {}
+  description: 'Production-oriented Go Web API scaffold. Application error codes:
+    0 success; 10000-19999 common/input; 20000-29999 authentication/authorization;
+    30000-39999 business; 50000-59999 infrastructure.'
+  title: Go API Template
+  version: "1.0"
+paths:
+  /api/v1/me:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httptransport.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/httptransport.MeResponseBody'
+              type: object
+        "401":
+          description: 'Code 20001: unauthorized'
+          schema:
+            $ref: '#/definitions/httptransport.Response'
+      security:
+      - Bearer: []
+      summary: Return the authenticated subject
+      tags:
+      - authentication
+  /api/v1/version:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httptransport.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/buildinfo.Info'
+              type: object
+      summary: Return build and runtime version information
+      tags:
+      - operations
+  /api/v1/webhooks/deliveries/get:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Identity
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httptransport.ResourceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httptransport.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/httptransport.DeliveryBody'
+              type: object
+      security:
+      - Bearer: []
+      summary: Get a webhook delivery record
+      tags:
+      - webhook-deliveries
+  /api/v1/webhooks/deliveries/list:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Filter and pagination
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httptransport.ListDeliveriesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httptransport.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/httptransport.DeliveryPageBody'
+              type: object
+      security:
+      - Bearer: []
+      summary: Search webhook delivery history
+      tags:
+      - webhook-deliveries
+  /api/v1/webhooks/deliveries/replay:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Identity and current version
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httptransport.VersionedResourceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httptransport.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/httptransport.DeliveryBody'
+              type: object
+      security:
+      - Bearer: []
+      summary: Replay a completed or dead webhook delivery
+      tags:
+      - webhook-deliveries
+  /api/v1/webhooks/subscriptions/create:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Subscription
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httptransport.CreateSubscriptionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httptransport.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/httptransport.CreateSubscriptionBody'
+              type: object
+        "400":
+          description: 'Code 10001: invalid endpoint or subject filter'
+          schema:
+            $ref: '#/definitions/httptransport.Response'
+      security:
+      - Bearer: []
+      summary: Create an external webhook subscription
+      tags:
+      - webhooks
+  /api/v1/webhooks/subscriptions/delete:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Identity and current version
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httptransport.VersionedResourceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httptransport.Response'
+      security:
+      - Bearer: []
+      summary: Soft-delete a webhook subscription
+      tags:
+      - webhooks
+  /api/v1/webhooks/subscriptions/get:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Identity
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httptransport.ResourceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httptransport.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/httptransport.SubscriptionBody'
+              type: object
+      security:
+      - Bearer: []
+      summary: Get one tenant webhook subscription
+      tags:
+      - webhooks
+  /api/v1/webhooks/subscriptions/list:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Filter and pagination
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httptransport.ListSubscriptionsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httptransport.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/httptransport.SubscriptionPageBody'
+              type: object
+      security:
+      - Bearer: []
+      summary: Search tenant webhook subscriptions
+      tags:
+      - webhooks
+  /api/v1/webhooks/subscriptions/rotate-secret:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Identity and current version
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httptransport.VersionedResourceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httptransport.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/httptransport.RotateSecretBody'
+              type: object
+      security:
+      - Bearer: []
+      summary: Rotate and return a webhook signing secret once
+      tags:
+      - webhooks
+  /api/v1/webhooks/subscriptions/test:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Test payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httptransport.TestSubscriptionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httptransport.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/httptransport.DeliveryBody'
+              type: object
+      security:
+      - Bearer: []
+      summary: Queue a synthetic delivery for a subscription
+      tags:
+      - webhooks
+  /api/v1/webhooks/subscriptions/update:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Subscription
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httptransport.UpdateSubscriptionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httptransport.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/httptransport.SubscriptionBody'
+              type: object
+        "409":
+          description: 'Code 30009: stale version'
+          schema:
+            $ref: '#/definitions/httptransport.Response'
+      security:
+      - Bearer: []
+      summary: Update a webhook subscription with optimistic locking
+      tags:
+      - webhooks
+  /live:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httptransport.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/health.Status'
+              type: object
+      summary: Check process liveness
+      tags:
+      - operations
+  /ready:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httptransport.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/health.Status'
+              type: object
+        "503":
+          description: 'Code 50003: dependency unavailable'
+          schema:
+            allOf:
+            - $ref: '#/definitions/httptransport.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/health.Status'
+              type: object
+      summary: Check database and Redis readiness
+      tags:
+      - operations
+schemes:
+- http
+- https
+securityDefinitions:
+  Bearer:
+    description: Enter "Bearer {JWT}".
+    in: header
+    name: Authorization
+    type: apiKey
+  PSK:
+    description: Enter "PSK {shared-key}" for routes configured with PSK authentication.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
