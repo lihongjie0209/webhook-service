@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lihongjie0209/microservice-platform-go/principal"
 	webhookv1 "github.com/lihongjie0209/platform-protos/gen/go/platform/webhook/v1"
 	"github.com/lihongjie0209/webhook-service/internal/auth"
 	"github.com/lihongjie0209/webhook-service/internal/config"
@@ -18,7 +19,6 @@ import (
 	apphealth "github.com/lihongjie0209/webhook-service/internal/health"
 	"github.com/lihongjie0209/webhook-service/internal/idempotency"
 	"github.com/lihongjie0209/webhook-service/internal/observability"
-	"github.com/lihongjie0209/webhook-service/internal/principal"
 	"github.com/lihongjie0209/webhook-service/internal/requestid"
 	webhookdomain "github.com/lihongjie0209/webhook-service/internal/webhook"
 
@@ -156,7 +156,7 @@ func authenticateGRPC(ctx context.Context, method string, service *auth.Service,
 		if len(values) == 0 || !auth.VerifyPSK(values[0], cfg.PSK.Key) {
 			return nil, status.Error(codes.Unauthenticated, "missing or invalid PSK")
 		}
-		return principal.WithContext(ctx, principal.Principal{Subject: "psk", Method: principal.AuthenticationPSK}), nil
+		return principal.SystemContext(ctx, "psk"), nil
 	}
 	if auth.MatchesAny(method, cfg.SkipGRPCMethods) {
 		return ctx, nil

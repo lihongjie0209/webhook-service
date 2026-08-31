@@ -401,6 +401,10 @@ func (h *Handler) available(c *gin.Context) bool {
 
 func (h *Handler) failWebhook(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, webhookdomain.ErrActorRequired):
+		Fail(c, h.logger, apperror.Unauthorized("authenticated actor is required"))
+	case errors.Is(err, webhookdomain.ErrForbidden):
+		Fail(c, h.logger, apperror.Forbidden("webhook tenant access denied"))
 	case errors.Is(err, webhookdomain.ErrInvalid):
 		Fail(c, h.logger, apperror.Invalid("invalid webhook request", err))
 	case errors.Is(err, webhookdomain.ErrNotFound):

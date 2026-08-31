@@ -11,8 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/lihongjie0209/microservice-platform-go/principal"
 	commonv1 "github.com/lihongjie0209/platform-protos/gen/go/platform/common/v1"
-	"github.com/lihongjie0209/webhook-service/internal/principal"
 )
 
 type Store interface {
@@ -65,6 +65,9 @@ func (s *Service) CreateSubscription(ctx context.Context, input CreateSubscripti
 	if err := validateSubscription(input.TenantID, input.Name, input.EndpointURL, input.SubjectFilter, input.TimeoutMS, input.MaxAttempts, input.RetryInitialSeconds); err != nil {
 		return Subscription{}, "", err
 	}
+	if err := authorizeTenant(ctx, input.TenantID); err != nil {
+		return Subscription{}, "", err
+	}
 	if _, _, err := s.policy.Resolve(ctx, input.EndpointURL); err != nil {
 		return Subscription{}, "", fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
@@ -111,6 +114,9 @@ func (s *Service) UpdateSubscription(ctx context.Context, input UpdateSubscripti
 	if err := validateSubscription(input.TenantID, input.Name, input.EndpointURL, input.SubjectFilter, input.TimeoutMS, input.MaxAttempts, input.RetryInitialSeconds); err != nil {
 		return Subscription{}, err
 	}
+	if err := authorizeTenant(ctx, input.TenantID); err != nil {
+		return Subscription{}, err
+	}
 	if _, _, err := s.policy.Resolve(ctx, input.EndpointURL); err != nil {
 		return Subscription{}, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
@@ -128,6 +134,9 @@ func (s *Service) RotateSecret(ctx context.Context, tenantID, id string, expecte
 	}
 	if tenantID == "" || id == "" || expectedVersion < 1 {
 		return Subscription{}, "", invalid("tenant ID, subscription ID, and expected version are required")
+	}
+	if err := authorizeTenant(ctx, tenantID); err != nil {
+		return Subscription{}, "", err
 	}
 	plain, encrypted, keyID, err := s.box.Generate()
 	if err != nil {
@@ -148,6 +157,9 @@ func (s *Service) DeleteSubscription(ctx context.Context, tenantID, id string, e
 	if tenantID == "" || id == "" || expectedVersion < 1 {
 		return invalid("tenant ID, subscription ID, and expected version are required")
 	}
+	if err := authorizeTenant(ctx, tenantID); err != nil {
+		return err
+	}
 	return s.store.DeleteSubscription(ctx, tenantID, id, expectedVersion, actor)
 }
 
@@ -155,12 +167,18 @@ func (s *Service) GetSubscription(ctx context.Context, tenantID, id string) (Sub
 	if tenantID == "" || id == "" {
 		return Subscription{}, invalid("tenant ID and subscription ID are required")
 	}
+	if err := authorizeTenant(ctx, tenantID); err != nil {
+		return Subscription{}, err
+	}
 	return s.store.GetSubscription(ctx, tenantID, id)
 }
 
 func (s *Service) ListSubscriptions(ctx context.Context, filter SubscriptionFilter) (Page[Subscription], error) {
 	if filter.TenantID == "" {
 		return Page[Subscription]{}, invalid("tenant ID is required")
+	}
+	if err := authorizeTenant(ctx, filter.TenantID); err != nil {
+		return Page[Subscription]{}, err
 	}
 	filter.Page, filter.PageSize = normalizePage(filter.Page, filter.PageSize)
 	if filter.Status != "" && !validSubscriptionStatus(filter.Status) {
@@ -173,12 +191,18 @@ func (s *Service) GetDelivery(ctx context.Context, tenantID, id string) (Deliver
 	if tenantID == "" || id == "" {
 		return Delivery{}, invalid("tenant ID and delivery ID are required")
 	}
+	if err := authorizeTenant(ctx, tenantID); err != nil {
+		return Delivery{}, err
+	}
 	return s.store.GetDelivery(ctx, tenantID, id)
 }
 
 func (s *Service) ListDeliveries(ctx context.Context, filter DeliveryFilter) (Page[Delivery], error) {
 	if filter.TenantID == "" || (filter.Status != "" && !validDeliveryStatus(filter.Status)) {
 		return Page[Delivery]{}, invalid("tenant ID and a valid delivery status are required")
+	}
+	if err := authorizeTenant(ctx, filter.TenantID); err != nil {
+		return Page[Delivery]{}, err
 	}
 	filter.Page, filter.PageSize = normalizePage(filter.Page, filter.PageSize)
 	return s.store.ListDeliveries(ctx, filter)
@@ -192,6 +216,9 @@ func (s *Service) ReplayDelivery(ctx context.Context, tenantID, id string, expec
 	if tenantID == "" || id == "" || expectedVersion < 1 {
 		return Delivery{}, invalid("tenant ID, delivery ID, and expected version are required")
 	}
+	if err := authorizeTenant(ctx, tenantID); err != nil {
+		return Delivery{}, err
+	}
 	return s.store.ReplayDelivery(ctx, tenantID, id, expectedVersion, actor)
 }
 
@@ -202,6 +229,9 @@ func (s *Service) TestSubscription(ctx context.Context, tenantID, id string, pay
 	}
 	if tenantID == "" || id == "" || !json.Valid(payloadJSON) || len(payloadJSON) > 1<<20 {
 		return Delivery{}, invalid("tenant ID, subscription ID, and a valid JSON payload up to 1 MiB are required")
+	}
+	if err := authorizeTenant(ctx, tenantID); err != nil {
+		return Delivery{}, err
 	}
 	if _, err := s.store.GetSubscription(ctx, tenantID, id); err != nil {
 		return Delivery{}, err
@@ -272,7 +302,23 @@ func actorFromContext(ctx context.Context) (string, error) {
 	if !ok {
 		return "", ErrActorRequired
 	}
-	return value.Subject, nil
+	return value.ID, nil
+}
+
+func authorizeTenant(ctx context.Context, tenantID string) error {
+	identity, ok := principal.FromContext(ctx)
+	if !ok {
+		return ErrActorRequired
+	}
+	switch identity.Type {
+	case principal.TypeServiceAccount, principal.TypeSystem:
+		return nil
+	case principal.TypeUser:
+		if identity.TenantID != "" && identity.TenantID == strings.TrimSpace(tenantID) {
+			return nil
+		}
+	}
+	return ErrForbidden
 }
 
 func defaultCreate(input CreateSubscriptionInput) CreateSubscriptionInput {

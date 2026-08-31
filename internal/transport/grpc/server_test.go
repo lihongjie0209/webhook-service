@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lihongjie0209/microservice-platform-go/principal"
 	webhookv1 "github.com/lihongjie0209/platform-protos/gen/go/platform/webhook/v1"
 	"github.com/lihongjie0209/webhook-service/internal/auth"
 	"github.com/lihongjie0209/webhook-service/internal/config"
-	"github.com/lihongjie0209/webhook-service/internal/principal"
 	"github.com/lihongjie0209/webhook-service/internal/requestid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -73,7 +73,7 @@ func TestAuthenticateGRPC_PSKWildcard(t *testing.T) {
 			}
 			if test.code == codes.OK {
 				value, ok := principal.FromContext(authenticated)
-				if !ok || value.Subject != "psk" || value.Method != principal.AuthenticationPSK {
+				if !ok || value.ID != "psk" || value.Type != principal.TypeSystem {
 					t.Fatalf("principal = %#v, %v", value, ok)
 				}
 			}
@@ -95,7 +95,7 @@ func TestAuthenticateGRPC_JWTInjectsPrincipal(t *testing.T) {
 		t.Fatal(err)
 	}
 	value, ok := principal.FromContext(ctx)
-	if !ok || value.Subject != "user-1" || value.Method != principal.AuthenticationJWT {
+	if !ok || value.ID != "user-1" || value.Type != principal.TypeServiceAccount {
 		t.Fatalf("principal = %#v, %v", value, ok)
 	}
 }

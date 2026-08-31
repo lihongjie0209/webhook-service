@@ -11,6 +11,7 @@ var (
 	ErrDuplicate       = errors.New("webhook resource already exists")
 	ErrInvalid         = errors.New("invalid webhook request")
 	ErrActorRequired   = errors.New("authenticated actor is required")
+	ErrForbidden       = errors.New("webhook tenant access denied")
 )
 
 const (

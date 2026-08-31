@@ -172,6 +172,8 @@ func grpcError(err error) error {
 		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, webhookdomain.ErrActorRequired):
 		return status.Error(codes.Unauthenticated, "authenticated actor is required")
+	case errors.Is(err, webhookdomain.ErrForbidden):
+		return status.Error(codes.PermissionDenied, "webhook tenant access denied")
 	default:
 		return status.Error(codes.Internal, "internal server error")
 	}

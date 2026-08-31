@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"net/netip"
 	"testing"
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lihongjie0209/microservice-platform-go/principal"
 	commonv1 "github.com/lihongjie0209/platform-protos/gen/go/platform/common/v1"
-	"github.com/lihongjie0209/webhook-service/internal/principal"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -42,7 +43,7 @@ func TestServiceCreateSubscriptionReturnsSecretOnce(t *testing.T) {
 	service := newTestService(t, store)
 	service.newID = func() string { return "subscription-1" }
 	service.now = func() time.Time { return time.Unix(1_700_000_000, 0) }
-	ctx := principal.WithContext(t.Context(), principal.Principal{Subject: "admin-1", Method: principal.AuthenticationJWT})
+	ctx := principal.WithContext(t.Context(), principal.Principal{ID: "admin-1", Type: principal.TypeUser, TenantID: "tenant-1"})
 
 	created, secret, err := service.CreateSubscription(ctx, CreateSubscriptionInput{
 		TenantID: "tenant-1", ApplicationID: "app-1", Name: "CRM events",
@@ -66,10 +67,41 @@ func TestServiceCreateSubscriptionRequiresActorAndPublicEndpoint(t *testing.T) {
 	if _, _, err := service.CreateSubscription(t.Context(), input); err == nil {
 		t.Fatal("CreateSubscription() accepted a missing actor")
 	}
-	ctx := principal.WithContext(t.Context(), principal.Principal{Subject: "admin-1"})
+	ctx := principal.WithContext(t.Context(), principal.Principal{ID: "admin-1", Type: principal.TypeUser, TenantID: "tenant-1"})
 	input.EndpointURL = "https://127.0.0.1/events"
 	if _, _, err := service.CreateSubscription(ctx, input); err == nil {
 		t.Fatal("CreateSubscription() accepted a private endpoint")
+	}
+}
+
+func TestServiceCreateSubscriptionRejectsDifferentTenant(t *testing.T) {
+	called := false
+	store := &fakeStore{createFn: func(_ context.Context, value Subscription) (Subscription, error) {
+		called = true
+		return value, nil
+	}}
+	service := newTestService(t, store)
+	ctx := principal.WithContext(t.Context(), principal.Principal{ID: "user-1", Type: principal.TypeUser, TenantID: "tenant-1"})
+	_, _, err := service.CreateSubscription(ctx, CreateSubscriptionInput{
+		TenantID: "tenant-2", Name: "events", EndpointURL: "https://hooks.example.com/events", SubjectFilter: "platform.identity.>",
+	})
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("CreateSubscription() error = %v, want ErrForbidden", err)
+	}
+	if called {
+		t.Fatal("CreateSubscription() wrote a cross-tenant subscription")
+	}
+}
+
+func TestAuthorizeTenantAllowsExplicitServiceCallers(t *testing.T) {
+	t.Parallel()
+	for _, identity := range []principal.Principal{
+		{ID: "service-1", Type: principal.TypeServiceAccount},
+		{ID: "system-1", Type: principal.TypeSystem},
+	} {
+		if err := authorizeTenant(principal.WithContext(t.Context(), identity), "tenant-2"); err != nil {
+			t.Fatalf("authorizeTenant(%s) error = %v", identity.Type, err)
+		}
 	}
 }
 
