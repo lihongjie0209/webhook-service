@@ -2,6 +2,7 @@ package httptransport
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	platformauthz "github.com/lihongjie0209/microservice-platform-go/authz"
 	"github.com/lihongjie0209/microservice-platform-go/principal"
 	"github.com/lihongjie0209/webhook-service/internal/apperror"
 	"github.com/lihongjie0209/webhook-service/internal/auth"
@@ -219,9 +221,46 @@ func JWT(service *auth.Service, logger *slog.Logger) gin.HandlerFunc {
 			return
 		}
 		c.Set("subject", identity.ID)
-		c.Request = c.Request.WithContext(principal.WithContext(c.Request.Context(), identity))
+		ctx := principal.WithContext(c.Request.Context(), identity)
+		c.Request = c.Request.WithContext(platformauthz.WithCallerCredential(ctx, header))
 		c.Next()
 	}
+}
+
+func Authorization(enabled bool, authorizer platformauthz.Authorizer, logger *slog.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		requirement, protected := webhookHTTPRequirement(c.FullPath())
+		if !enabled || !protected {
+			c.Next()
+			return
+		}
+		if err := platformauthz.Enforce(c.Request.Context(), authorizer, requirement); err != nil {
+			if errors.Is(err, platformauthz.ErrDecisionUnavailable) {
+				Fail(c, logger, apperror.Unavailable("authorization decision is unavailable", err))
+				return
+			}
+			Fail(c, logger, apperror.Forbidden("permission denied"))
+			return
+		}
+		c.Next()
+	}
+}
+
+func webhookHTTPRequirement(route string) (platformauthz.Requirement, bool) {
+	requirements := map[string]platformauthz.Requirement{
+		"/api/v1/webhooks/subscriptions/create":        {Resource: "webhook.subscription", Action: "create"},
+		"/api/v1/webhooks/subscriptions/update":        {Resource: "webhook.subscription", Action: "update"},
+		"/api/v1/webhooks/subscriptions/get":           {Resource: "webhook.subscription", Action: "read"},
+		"/api/v1/webhooks/subscriptions/list":          {Resource: "webhook.subscription", Action: "list"},
+		"/api/v1/webhooks/subscriptions/rotate-secret": {Resource: "webhook.subscription", Action: "rotate-secret"},
+		"/api/v1/webhooks/subscriptions/delete":        {Resource: "webhook.subscription", Action: "delete"},
+		"/api/v1/webhooks/subscriptions/test":          {Resource: "webhook.subscription", Action: "test"},
+		"/api/v1/webhooks/deliveries/get":              {Resource: "webhook.delivery", Action: "read"},
+		"/api/v1/webhooks/deliveries/list":             {Resource: "webhook.delivery", Action: "list"},
+		"/api/v1/webhooks/deliveries/replay":           {Resource: "webhook.delivery", Action: "replay"},
+	}
+	requirement, ok := requirements[route]
+	return requirement, ok
 }
 
 func Authentication(service *auth.Service, logger *slog.Logger, cfg config.Auth) gin.HandlerFunc {

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	platformauthz "github.com/lihongjie0209/microservice-platform-go/authz"
 	"github.com/lihongjie0209/microservice-platform-go/principal"
 	webhookv1 "github.com/lihongjie0209/platform-protos/gen/go/platform/webhook/v1"
 	"github.com/lihongjie0209/webhook-service/internal/auth"
@@ -40,11 +41,11 @@ type Server struct {
 	logger  *slog.Logger
 }
 
-func NewServer(lc fx.Lifecycle, cfg config.Config, authService *auth.Service, healthService *apphealth.Service, webhookService *webhookdomain.Service, metrics *observability.Metrics, logger *slog.Logger) (*Server, error) {
+func NewServer(lc fx.Lifecycle, cfg config.Config, authService *auth.Service, authorizer platformauthz.Authorizer, healthService *apphealth.Service, webhookService *webhookdomain.Service, metrics *observability.Metrics, logger *slog.Logger) (*Server, error) {
 	options := []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(cfg.GRPC.MaxReceiveBytes),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-		grpc.ChainUnaryInterceptor(environmentInterceptor(cfg.Runtime.ActiveProfile), requestIDInterceptor, idempotencyInterceptor, recoveryInterceptor(logger), authInterceptor(authService, cfg.Auth), metricsInterceptor(metrics, logger)),
+		grpc.ChainUnaryInterceptor(environmentInterceptor(cfg.Runtime.ActiveProfile), requestIDInterceptor, idempotencyInterceptor, recoveryInterceptor(logger), authInterceptor(authService, cfg.Auth), platformauthz.UnaryServerInterceptor(authorizer, webhookGRPCRequirement(cfg.Authorization.Enabled)), metricsInterceptor(metrics, logger)),
 		grpc.ChainStreamInterceptor(environmentStreamInterceptor(cfg.Runtime.ActiveProfile), requestIDStreamInterceptor, idempotencyStreamInterceptor, recoveryStreamInterceptor(logger), authStreamInterceptor(authService, cfg.Auth), metricsStreamInterceptor(metrics, logger)),
 	}
 	if cfg.GRPC.TLS.Enabled {
@@ -63,6 +64,28 @@ func NewServer(lc fx.Lifecycle, cfg config.Config, authService *auth.Service, he
 	server := &Server{server: grpcServer, address: cfg.GRPC.Address, logger: logger}
 	lc.Append(fx.Hook{OnStart: server.start(cfg.GRPC.Enabled), OnStop: server.stop})
 	return server, nil
+}
+
+func webhookGRPCRequirement(enabled bool) platformauthz.GRPCResolver {
+	return func(method string) (platformauthz.Requirement, bool) {
+		if !enabled {
+			return platformauthz.Requirement{}, false
+		}
+		requirements := map[string]platformauthz.Requirement{
+			webhookv1.WebhookService_CreateSubscription_FullMethodName:       {Resource: "webhook.subscription", Action: "create"},
+			webhookv1.WebhookService_UpdateSubscription_FullMethodName:       {Resource: "webhook.subscription", Action: "update"},
+			webhookv1.WebhookService_GetSubscription_FullMethodName:          {Resource: "webhook.subscription", Action: "read"},
+			webhookv1.WebhookService_ListSubscriptions_FullMethodName:        {Resource: "webhook.subscription", Action: "list"},
+			webhookv1.WebhookService_RotateSubscriptionSecret_FullMethodName: {Resource: "webhook.subscription", Action: "rotate-secret"},
+			webhookv1.WebhookService_DeleteSubscription_FullMethodName:       {Resource: "webhook.subscription", Action: "delete"},
+			webhookv1.WebhookService_TestSubscription_FullMethodName:         {Resource: "webhook.subscription", Action: "test"},
+			webhookv1.WebhookService_GetDelivery_FullMethodName:              {Resource: "webhook.delivery", Action: "read"},
+			webhookv1.WebhookService_ListDeliveries_FullMethodName:           {Resource: "webhook.delivery", Action: "list"},
+			webhookv1.WebhookService_ReplayDelivery_FullMethodName:           {Resource: "webhook.delivery", Action: "replay"},
+		}
+		requirement, ok := requirements[method]
+		return requirement, ok
+	}
 }
 
 func (s *Server) start(enabled bool) func(context.Context) error {

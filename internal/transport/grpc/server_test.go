@@ -19,6 +19,26 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 )
 
+func TestWebhookGRPCRequirementCoversEveryBusinessMethod(t *testing.T) {
+	t.Parallel()
+	resolve := webhookGRPCRequirement(true)
+	methods := []string{
+		webhookv1.WebhookService_CreateSubscription_FullMethodName, webhookv1.WebhookService_UpdateSubscription_FullMethodName,
+		webhookv1.WebhookService_GetSubscription_FullMethodName, webhookv1.WebhookService_ListSubscriptions_FullMethodName,
+		webhookv1.WebhookService_RotateSubscriptionSecret_FullMethodName, webhookv1.WebhookService_DeleteSubscription_FullMethodName,
+		webhookv1.WebhookService_TestSubscription_FullMethodName, webhookv1.WebhookService_GetDelivery_FullMethodName,
+		webhookv1.WebhookService_ListDeliveries_FullMethodName, webhookv1.WebhookService_ReplayDelivery_FullMethodName,
+	}
+	for _, method := range methods {
+		if requirement, ok := resolve(method); !ok || requirement.Resource == "" || requirement.Action == "" {
+			t.Fatalf("method %q requirement = %+v, %v", method, requirement, ok)
+		}
+	}
+	if _, ok := webhookGRPCRequirement(false)(methods[0]); ok {
+		t.Fatal("disabled authorization must not call the decision service")
+	}
+}
+
 func TestWebhookServerThroughGRPC(t *testing.T) {
 	t.Parallel()
 	authService := auth.New(config.Config{JWT: config.JWT{Issuer: "test", Secret: "01234567890123456789012345678901", TTL: time.Hour}, Auth: config.Auth{ClientID: "client", ClientSecret: "secret"}})
