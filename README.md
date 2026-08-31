@@ -66,7 +66,7 @@ header    = Webhook-Signature: v1=<expected>
 - 认证跳过路径和 PSK 路径由配置维护并支持 `path.Match` 通配符。
 - 意外数据库或网络错误只记录在服务端，不泄漏给客户端。
 - 自动迁移表为 `webhook_schema_migrations`，默认数据库 `platform`、schema `webhook`，避免共享数据库中的迁移冲突。
-- 投递默认保留 30 天。上线前应配置清理/归档任务；达到分区收益阈值后再引入 pg_partman，同时保留全局幂等约束。
+- 投递和已完成 Inbox 记录默认保留 30 天；服务以有界批次清理，Inbox 失败/处理中记录不会删除。上线前应配置清理前归档；达到分区收益阈值后再引入 pg_partman，同时保留全局幂等约束。
 
 ## 常用命令
 

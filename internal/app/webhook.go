@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	platforminbox "github.com/lihongjie0209/microservice-platform-go/inbox"
@@ -72,7 +73,14 @@ func newWebhookInbox(db *sqlx.DB, cfg config.Config) (*platforminbox.SQLStore, e
 	return platforminbox.NewSQLStore(db, dialect, "webhook_event_inbox")
 }
 
-func startWebhookRuntime(lifecycle fx.Lifecycle, bus *eventbus.Bus, inbox *platforminbox.SQLStore, service *webhook.Service, dispatcher *webhook.Dispatcher, cleaner *webhook.RetentionCleaner, logger *slog.Logger) {
+func newWebhookInboxRetentionCleaner(inbox *platforminbox.SQLStore, cfg config.Config) (*platforminbox.RetentionCleaner, error) {
+	if inbox == nil {
+		return nil, nil
+	}
+	return platforminbox.NewRetentionCleaner(inbox, platforminbox.RetentionConfig{Retention: cfg.Webhook.Retention, BatchSize: cfg.Webhook.BatchSize})
+}
+
+func startWebhookRuntime(lifecycle fx.Lifecycle, cfg config.Config, bus *eventbus.Bus, inbox *platforminbox.SQLStore, inboxCleaner *platforminbox.RetentionCleaner, service *webhook.Service, dispatcher *webhook.Dispatcher, cleaner *webhook.RetentionCleaner, logger *slog.Logger) {
 	var cancel context.CancelFunc
 	var workers sync.WaitGroup
 	lifecycle.Append(fx.Hook{
@@ -94,6 +102,24 @@ func startWebhookRuntime(lifecycle fx.Lifecycle, bus *eventbus.Bus, inbox *platf
 					defer workers.Done()
 					if err := cleaner.Run(runContext); err != nil && !errors.Is(err, context.Canceled) {
 						logger.Error("webhook retention cleaner stopped", "error", err)
+					}
+				}()
+			}
+			if inboxCleaner != nil {
+				workers.Add(1)
+				go func() {
+					defer workers.Done()
+					ticker := time.NewTicker(cfg.Webhook.CleanupInterval)
+					defer ticker.Stop()
+					for {
+						if _, err := inboxCleaner.RunOnce(runContext); err != nil && !errors.Is(err, context.Canceled) {
+							logger.Error("webhook inbox retention cleaner failed", "error", err)
+						}
+						select {
+						case <-runContext.Done():
+							return
+						case <-ticker.C:
+						}
 					}
 				}()
 			}
@@ -130,6 +156,6 @@ func startWebhookRuntime(lifecycle fx.Lifecycle, bus *eventbus.Bus, inbox *platf
 }
 
 var WebhookModule = fx.Module("webhook",
-	fx.Provide(newWebhookRepository, newWebhookSecretBox, newWebhookURLPolicy, newWebhookSender, newWebhookService, newWebhookDispatcher, newWebhookRetentionCleaner, newWebhookInbox),
+	fx.Provide(newWebhookRepository, newWebhookSecretBox, newWebhookURLPolicy, newWebhookSender, newWebhookService, newWebhookDispatcher, newWebhookRetentionCleaner, newWebhookInbox, newWebhookInboxRetentionCleaner),
 	fx.Invoke(startWebhookRuntime),
 )
