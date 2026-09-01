@@ -729,6 +729,7 @@ const docTemplate = `{
         "httptransport.CreateSubscriptionRequest": {
             "type": "object",
             "required": [
+                "application_id",
                 "endpoint_url",
                 "name",
                 "subject_filter",
@@ -769,6 +770,9 @@ const docTemplate = `{
         "httptransport.DeliveryBody": {
             "type": "object",
             "properties": {
+                "application_id": {
+                    "type": "string"
+                },
                 "attempt_count": {
                     "type": "integer"
                 },
@@ -842,9 +846,13 @@ const docTemplate = `{
         "httptransport.ListDeliveriesRequest": {
             "type": "object",
             "required": [
+                "application_id",
                 "tenant_id"
             ],
             "properties": {
+                "application_id": {
+                    "type": "string"
+                },
                 "created_from": {
                     "type": "string",
                     "example": "2026-08-01T00:00:00+08:00"
@@ -877,6 +885,7 @@ const docTemplate = `{
         "httptransport.ListSubscriptionsRequest": {
             "type": "object",
             "required": [
+                "application_id",
                 "tenant_id"
             ],
             "properties": {
@@ -940,10 +949,14 @@ const docTemplate = `{
         "httptransport.ResourceRequest": {
             "type": "object",
             "required": [
+                "application_id",
                 "id",
                 "tenant_id"
             ],
             "properties": {
+                "application_id": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -1048,11 +1061,15 @@ const docTemplate = `{
         "httptransport.TestSubscriptionRequest": {
             "type": "object",
             "required": [
+                "application_id",
                 "id",
                 "payload_json",
                 "tenant_id"
             ],
             "properties": {
+                "application_id": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -1067,6 +1084,7 @@ const docTemplate = `{
         "httptransport.UpdateSubscriptionRequest": {
             "type": "object",
             "required": [
+                "application_id",
                 "endpoint_url",
                 "expected_version",
                 "id",
@@ -1079,6 +1097,9 @@ const docTemplate = `{
                 "timeout_ms"
             ],
             "properties": {
+                "application_id": {
+                    "type": "string"
+                },
                 "endpoint_url": {
                     "type": "string"
                 },
@@ -1119,11 +1140,15 @@ const docTemplate = `{
         "httptransport.VersionedResourceRequest": {
             "type": "object",
             "required": [
+                "application_id",
                 "expected_version",
                 "id",
                 "tenant_id"
             ],
             "properties": {
+                "application_id": {
+                    "type": "string"
+                },
                 "expected_version": {
                     "type": "integer"
                 },

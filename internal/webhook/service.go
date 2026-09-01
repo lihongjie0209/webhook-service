@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/lihongjie0209/microservice-platform-go/appaccess"
 	"github.com/lihongjie0209/microservice-platform-go/principal"
 	commonv1 "github.com/lihongjie0209/platform-protos/gen/go/platform/common/v1"
 )
@@ -18,31 +19,32 @@ import (
 type Store interface {
 	CreateSubscription(context.Context, Subscription) (Subscription, error)
 	UpdateSubscription(context.Context, Subscription, int64, string) (Subscription, error)
-	RotateSecret(context.Context, string, string, int64, []byte, string, string) (Subscription, error)
-	DeleteSubscription(context.Context, string, string, int64, string) error
-	GetSubscription(context.Context, string, string) (Subscription, error)
+	RotateSecret(context.Context, string, string, string, int64, []byte, string, string) (Subscription, error)
+	DeleteSubscription(context.Context, string, string, string, int64, string) error
+	GetSubscription(context.Context, string, string, string) (Subscription, error)
 	ListSubscriptions(context.Context, SubscriptionFilter) (Page[Subscription], error)
-	GetDelivery(context.Context, string, string) (Delivery, error)
+	GetDelivery(context.Context, string, string, string) (Delivery, error)
 	ListDeliveries(context.Context, DeliveryFilter) (Page[Delivery], error)
-	ReplayDelivery(context.Context, string, string, int64, string) (Delivery, error)
-	ListActiveSubscriptionsTx(context.Context, *sqlx.Tx, string) ([]Subscription, error)
+	ReplayDelivery(context.Context, string, string, string, int64, string) (Delivery, error)
+	ListActiveSubscriptionsTx(context.Context, *sqlx.Tx, string, string) ([]Subscription, error)
 	InsertDeliveryTx(context.Context, *sqlx.Tx, Delivery) (bool, error)
 	InsertDelivery(context.Context, Delivery) (Delivery, error)
 }
 
 type Service struct {
-	store  Store
-	box    *SecretBox
-	policy *URLPolicy
-	now    func() time.Time
-	newID  func() string
+	store        Store
+	box          *SecretBox
+	policy       *URLPolicy
+	applications appaccess.Verifier
+	now          func() time.Time
+	newID        func() string
 }
 
-func NewService(store Store, box *SecretBox, policy *URLPolicy) (*Service, error) {
-	if store == nil || box == nil || policy == nil {
-		return nil, errors.New("webhook store, secret box, and URL policy are required")
+func NewService(store Store, box *SecretBox, policy *URLPolicy, applications appaccess.Verifier) (*Service, error) {
+	if store == nil || box == nil || policy == nil || applications == nil {
+		return nil, errors.New("webhook store, secret box, URL policy, and application verifier are required")
 	}
-	return &Service{store: store, box: box, policy: policy, now: time.Now, newID: uuid.NewString}, nil
+	return &Service{store: store, box: box, policy: policy, applications: applications, now: time.Now, newID: uuid.NewString}, nil
 }
 
 type CreateSubscriptionInput struct {
@@ -65,7 +67,7 @@ func (s *Service) CreateSubscription(ctx context.Context, input CreateSubscripti
 	if err := validateSubscription(input.TenantID, input.Name, input.EndpointURL, input.SubjectFilter, input.TimeoutMS, input.MaxAttempts, input.RetryInitialSeconds); err != nil {
 		return Subscription{}, "", err
 	}
-	if err := authorizeTenant(ctx, input.TenantID); err != nil {
+	if err := s.authorizeApplication(ctx, input.TenantID, input.ApplicationID); err != nil {
 		return Subscription{}, "", err
 	}
 	if _, _, err := s.policy.Resolve(ctx, input.EndpointURL); err != nil {
@@ -93,6 +95,7 @@ func (s *Service) CreateSubscription(ctx context.Context, input CreateSubscripti
 type UpdateSubscriptionInput struct {
 	ID                  string
 	TenantID            string
+	ApplicationID       string
 	Name                string
 	EndpointURL         string
 	SubjectFilter       string
@@ -114,70 +117,70 @@ func (s *Service) UpdateSubscription(ctx context.Context, input UpdateSubscripti
 	if err := validateSubscription(input.TenantID, input.Name, input.EndpointURL, input.SubjectFilter, input.TimeoutMS, input.MaxAttempts, input.RetryInitialSeconds); err != nil {
 		return Subscription{}, err
 	}
-	if err := authorizeTenant(ctx, input.TenantID); err != nil {
+	if err := s.authorizeApplication(ctx, input.TenantID, input.ApplicationID); err != nil {
 		return Subscription{}, err
 	}
 	if _, _, err := s.policy.Resolve(ctx, input.EndpointURL); err != nil {
 		return Subscription{}, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	return s.store.UpdateSubscription(ctx, Subscription{
-		ID: input.ID, TenantID: input.TenantID, Name: input.Name, EndpointURL: input.EndpointURL,
+		ID: input.ID, TenantID: input.TenantID, ApplicationID: input.ApplicationID, Name: input.Name, EndpointURL: input.EndpointURL,
 		SubjectFilter: input.SubjectFilter, Status: input.Status, TimeoutMS: input.TimeoutMS,
 		MaxAttempts: input.MaxAttempts, RetryInitialSeconds: input.RetryInitialSeconds,
 	}, input.ExpectedVersion, actor)
 }
 
-func (s *Service) RotateSecret(ctx context.Context, tenantID, id string, expectedVersion int64) (Subscription, string, error) {
+func (s *Service) RotateSecret(ctx context.Context, tenantID, applicationID, id string, expectedVersion int64) (Subscription, string, error) {
 	actor, err := actorFromContext(ctx)
 	if err != nil {
 		return Subscription{}, "", err
 	}
-	if tenantID == "" || id == "" || expectedVersion < 1 {
+	if tenantID == "" || applicationID == "" || id == "" || expectedVersion < 1 {
 		return Subscription{}, "", invalid("tenant ID, subscription ID, and expected version are required")
 	}
-	if err := authorizeTenant(ctx, tenantID); err != nil {
+	if err := s.authorizeApplication(ctx, tenantID, applicationID); err != nil {
 		return Subscription{}, "", err
 	}
 	plain, encrypted, keyID, err := s.box.Generate()
 	if err != nil {
 		return Subscription{}, "", err
 	}
-	value, err := s.store.RotateSecret(ctx, tenantID, id, expectedVersion, encrypted, keyID, actor)
+	value, err := s.store.RotateSecret(ctx, tenantID, applicationID, id, expectedVersion, encrypted, keyID, actor)
 	if err != nil {
 		return Subscription{}, "", err
 	}
 	return value, plain, nil
 }
 
-func (s *Service) DeleteSubscription(ctx context.Context, tenantID, id string, expectedVersion int64) error {
+func (s *Service) DeleteSubscription(ctx context.Context, tenantID, applicationID, id string, expectedVersion int64) error {
 	actor, err := actorFromContext(ctx)
 	if err != nil {
 		return err
 	}
-	if tenantID == "" || id == "" || expectedVersion < 1 {
+	if tenantID == "" || applicationID == "" || id == "" || expectedVersion < 1 {
 		return invalid("tenant ID, subscription ID, and expected version are required")
 	}
-	if err := authorizeTenant(ctx, tenantID); err != nil {
+	if err := s.authorizeApplication(ctx, tenantID, applicationID); err != nil {
 		return err
 	}
-	return s.store.DeleteSubscription(ctx, tenantID, id, expectedVersion, actor)
+	return s.store.DeleteSubscription(ctx, tenantID, applicationID, id, expectedVersion, actor)
 }
 
-func (s *Service) GetSubscription(ctx context.Context, tenantID, id string) (Subscription, error) {
-	if tenantID == "" || id == "" {
+func (s *Service) GetSubscription(ctx context.Context, tenantID, applicationID, id string) (Subscription, error) {
+	if tenantID == "" || applicationID == "" || id == "" {
 		return Subscription{}, invalid("tenant ID and subscription ID are required")
 	}
-	if err := authorizeTenant(ctx, tenantID); err != nil {
+	if err := s.authorizeApplication(ctx, tenantID, applicationID); err != nil {
 		return Subscription{}, err
 	}
-	return s.store.GetSubscription(ctx, tenantID, id)
+	return s.store.GetSubscription(ctx, tenantID, applicationID, id)
 }
 
 func (s *Service) ListSubscriptions(ctx context.Context, filter SubscriptionFilter) (Page[Subscription], error) {
-	if filter.TenantID == "" {
+	if filter.TenantID == "" || filter.ApplicationID == "" {
 		return Page[Subscription]{}, invalid("tenant ID is required")
 	}
-	if err := authorizeTenant(ctx, filter.TenantID); err != nil {
+	if err := s.authorizeApplication(ctx, filter.TenantID, filter.ApplicationID); err != nil {
 		return Page[Subscription]{}, err
 	}
 	filter.Page, filter.PageSize = normalizePage(filter.Page, filter.PageSize)
@@ -187,59 +190,59 @@ func (s *Service) ListSubscriptions(ctx context.Context, filter SubscriptionFilt
 	return s.store.ListSubscriptions(ctx, filter)
 }
 
-func (s *Service) GetDelivery(ctx context.Context, tenantID, id string) (Delivery, error) {
-	if tenantID == "" || id == "" {
+func (s *Service) GetDelivery(ctx context.Context, tenantID, applicationID, id string) (Delivery, error) {
+	if tenantID == "" || applicationID == "" || id == "" {
 		return Delivery{}, invalid("tenant ID and delivery ID are required")
 	}
-	if err := authorizeTenant(ctx, tenantID); err != nil {
+	if err := s.authorizeApplication(ctx, tenantID, applicationID); err != nil {
 		return Delivery{}, err
 	}
-	return s.store.GetDelivery(ctx, tenantID, id)
+	return s.store.GetDelivery(ctx, tenantID, applicationID, id)
 }
 
 func (s *Service) ListDeliveries(ctx context.Context, filter DeliveryFilter) (Page[Delivery], error) {
-	if filter.TenantID == "" || (filter.Status != "" && !validDeliveryStatus(filter.Status)) {
+	if filter.TenantID == "" || filter.ApplicationID == "" || (filter.Status != "" && !validDeliveryStatus(filter.Status)) {
 		return Page[Delivery]{}, invalid("tenant ID and a valid delivery status are required")
 	}
-	if err := authorizeTenant(ctx, filter.TenantID); err != nil {
+	if err := s.authorizeApplication(ctx, filter.TenantID, filter.ApplicationID); err != nil {
 		return Page[Delivery]{}, err
 	}
 	filter.Page, filter.PageSize = normalizePage(filter.Page, filter.PageSize)
 	return s.store.ListDeliveries(ctx, filter)
 }
 
-func (s *Service) ReplayDelivery(ctx context.Context, tenantID, id string, expectedVersion int64) (Delivery, error) {
+func (s *Service) ReplayDelivery(ctx context.Context, tenantID, applicationID, id string, expectedVersion int64) (Delivery, error) {
 	actor, err := actorFromContext(ctx)
 	if err != nil {
 		return Delivery{}, err
 	}
-	if tenantID == "" || id == "" || expectedVersion < 1 {
+	if tenantID == "" || applicationID == "" || id == "" || expectedVersion < 1 {
 		return Delivery{}, invalid("tenant ID, delivery ID, and expected version are required")
 	}
-	if err := authorizeTenant(ctx, tenantID); err != nil {
+	if err := s.authorizeApplication(ctx, tenantID, applicationID); err != nil {
 		return Delivery{}, err
 	}
-	return s.store.ReplayDelivery(ctx, tenantID, id, expectedVersion, actor)
+	return s.store.ReplayDelivery(ctx, tenantID, applicationID, id, expectedVersion, actor)
 }
 
-func (s *Service) TestSubscription(ctx context.Context, tenantID, id string, payloadJSON []byte) (Delivery, error) {
+func (s *Service) TestSubscription(ctx context.Context, tenantID, applicationID, id string, payloadJSON []byte) (Delivery, error) {
 	actor, err := actorFromContext(ctx)
 	if err != nil {
 		return Delivery{}, err
 	}
-	if tenantID == "" || id == "" || !json.Valid(payloadJSON) || len(payloadJSON) > 1<<20 {
+	if tenantID == "" || applicationID == "" || id == "" || !json.Valid(payloadJSON) || len(payloadJSON) > 1<<20 {
 		return Delivery{}, invalid("tenant ID, subscription ID, and a valid JSON payload up to 1 MiB are required")
 	}
-	if err := authorizeTenant(ctx, tenantID); err != nil {
+	if err := s.authorizeApplication(ctx, tenantID, applicationID); err != nil {
 		return Delivery{}, err
 	}
-	if _, err := s.store.GetSubscription(ctx, tenantID, id); err != nil {
+	if _, err := s.store.GetSubscription(ctx, tenantID, applicationID, id); err != nil {
 		return Delivery{}, err
 	}
 	now := s.now()
 	deliveryID := s.newID()
 	return s.store.InsertDelivery(ctx, Delivery{
-		ID: deliveryID, SubscriptionID: id, TenantID: tenantID, EventID: "test:" + deliveryID,
+		ID: deliveryID, SubscriptionID: id, TenantID: tenantID, ApplicationID: applicationID, EventID: "test:" + deliveryID,
 		EventSubject: "platform.webhook.test.v1", Payload: append([]byte(nil), payloadJSON...), Status: DeliveryPending,
 		NextAttemptAt: now, Version: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: actor, UpdatedBy: actor,
 	})
@@ -251,6 +254,7 @@ type externalEnvelope struct {
 	AggregateID   string `json:"aggregate_id"`
 	AggregateType string `json:"aggregate_type"`
 	TenantID      string `json:"tenant_id"`
+	ApplicationID string `json:"application_id"`
 	SchemaVersion uint32 `json:"schema_version"`
 	OccurredAt    string `json:"occurred_at"`
 	RequestID     string `json:"request_id,omitempty"`
@@ -260,16 +264,16 @@ type externalEnvelope struct {
 }
 
 func (s *Service) PlanDeliveriesTx(ctx context.Context, tx *sqlx.Tx, subject string, envelope *commonv1.EventEnvelope) (int, error) {
-	if tx == nil || envelope == nil || envelope.GetEventId() == "" || envelope.GetTenantId() == "" || strings.HasPrefix(subject, "platform.webhook.") {
+	if tx == nil || envelope == nil || envelope.GetEventId() == "" || envelope.GetTenantId() == "" || envelope.GetApplicationId() == "" || strings.HasPrefix(subject, "platform.webhook.") {
 		return 0, errors.New("valid tenant event and transaction are required")
 	}
-	subscriptions, err := s.store.ListActiveSubscriptionsTx(ctx, tx, envelope.GetTenantId())
+	subscriptions, err := s.store.ListActiveSubscriptionsTx(ctx, tx, envelope.GetTenantId(), envelope.GetApplicationId())
 	if err != nil {
 		return 0, err
 	}
 	payload, err := json.Marshal(externalEnvelope{
 		EventID: envelope.GetEventId(), EventType: envelope.GetEventType(), AggregateID: envelope.GetAggregateId(),
-		AggregateType: envelope.GetAggregateType(), TenantID: envelope.GetTenantId(), SchemaVersion: envelope.GetSchemaVersion(),
+		AggregateType: envelope.GetAggregateType(), TenantID: envelope.GetTenantId(), ApplicationID: envelope.GetApplicationId(), SchemaVersion: envelope.GetSchemaVersion(),
 		OccurredAt: envelope.GetOccurredAt().AsTime().Format(time.RFC3339Nano), RequestID: envelope.GetContext().GetRequestId(),
 		TraceID: envelope.GetContext().GetTraceId(), ActorID: envelope.GetContext().GetActorId(), PayloadBase64: base64.StdEncoding.EncodeToString(envelope.GetPayload()),
 	})
@@ -283,7 +287,7 @@ func (s *Service) PlanDeliveriesTx(ctx context.Context, tx *sqlx.Tx, subject str
 			continue
 		}
 		inserted, err := s.store.InsertDeliveryTx(ctx, tx, Delivery{
-			ID: s.newID(), SubscriptionID: subscription.ID, TenantID: subscription.TenantID,
+			ID: s.newID(), SubscriptionID: subscription.ID, TenantID: subscription.TenantID, ApplicationID: subscription.ApplicationID,
 			EventID: envelope.GetEventId(), EventSubject: subject, Payload: payload, Status: DeliveryPending,
 			NextAttemptAt: now, CreatedAt: now, UpdatedAt: now, CreatedBy: "webhook-event-consumer", UpdatedBy: "webhook-event-consumer",
 		})
@@ -319,6 +323,22 @@ func authorizeTenant(ctx context.Context, tenantID string) error {
 		}
 	}
 	return ErrForbidden
+}
+
+func (s *Service) authorizeApplication(ctx context.Context, tenantID, applicationID string) error {
+	if strings.TrimSpace(applicationID) == "" {
+		return invalid("application ID is required")
+	}
+	if err := authorizeTenant(ctx, tenantID); err != nil {
+		return err
+	}
+	if err := s.applications.Verify(ctx, tenantID, applicationID); err != nil {
+		if errors.Is(err, appaccess.ErrNotGranted) {
+			return ErrForbidden
+		}
+		return fmt.Errorf("verify tenant application grant: %w", err)
+	}
+	return nil
 }
 
 func defaultCreate(input CreateSubscriptionInput) CreateSubscriptionInput {

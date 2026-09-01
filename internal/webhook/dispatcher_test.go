@@ -21,7 +21,7 @@ type fakeDeliveryStore struct {
 	retryAt      *time.Time
 }
 
-func (f *fakeDeliveryStore) GetSubscription(context.Context, string, string) (Subscription, error) {
+func (f *fakeDeliveryStore) GetSubscription(context.Context, string, string, string) (Subscription, error) {
 	return f.subscription, nil
 }
 

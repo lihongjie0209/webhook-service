@@ -9,9 +9,12 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lihongjie0209/microservice-platform-go/appaccess"
 	platforminbox "github.com/lihongjie0209/microservice-platform-go/inbox"
+	applicationv1 "github.com/lihongjie0209/platform-protos/gen/go/platform/application/v1"
 	"github.com/lihongjie0209/webhook-service/internal/config"
 	"github.com/lihongjie0209/webhook-service/internal/eventbus"
+	"github.com/lihongjie0209/webhook-service/internal/outbound"
 	"github.com/lihongjie0209/webhook-service/internal/webhook"
 	"go.uber.org/fx"
 )
@@ -38,11 +41,25 @@ func newWebhookSender(policy *webhook.URLPolicy, cfg config.Config) (*webhook.Se
 	return webhook.NewSender(policy, cfg.Webhook.MaxResponseBytes)
 }
 
-func newWebhookService(repository *webhook.Repository, box *webhook.SecretBox, policy *webhook.URLPolicy) (*webhook.Service, error) {
+func newApplicationVerifier(repository *webhook.Repository, registry *outbound.Registry) (appaccess.Verifier, error) {
+	if repository == nil {
+		return nil, nil
+	}
+	if registry == nil {
+		return nil, errors.New("webhook service requires outbound registry")
+	}
+	connection, ok := registry.GRPC("application")
+	if !ok {
+		return nil, errors.New("webhook service requires outbound.grpc.application")
+	}
+	return appaccess.NewGRPCVerifier(applicationv1.NewApplicationServiceClient(connection), 2*time.Second), nil
+}
+
+func newWebhookService(repository *webhook.Repository, box *webhook.SecretBox, policy *webhook.URLPolicy, applications appaccess.Verifier) (*webhook.Service, error) {
 	if repository == nil || box == nil {
 		return nil, nil
 	}
-	return webhook.NewService(repository, box, policy)
+	return webhook.NewService(repository, box, policy, applications)
 }
 
 func newWebhookDispatcher(repository *webhook.Repository, sender *webhook.Sender, box *webhook.SecretBox, cfg config.Config, logger *slog.Logger) (*webhook.Dispatcher, error) {
@@ -156,6 +173,6 @@ func startWebhookRuntime(lifecycle fx.Lifecycle, cfg config.Config, bus *eventbu
 }
 
 var WebhookModule = fx.Module("webhook",
-	fx.Provide(newWebhookRepository, newWebhookSecretBox, newWebhookURLPolicy, newWebhookSender, newWebhookService, newWebhookDispatcher, newWebhookRetentionCleaner, newWebhookInbox, newWebhookInboxRetentionCleaner),
+	fx.Provide(newWebhookRepository, newWebhookSecretBox, newWebhookURLPolicy, newWebhookSender, newApplicationVerifier, newWebhookService, newWebhookDispatcher, newWebhookRetentionCleaner, newWebhookInbox, newWebhookInboxRetentionCleaner),
 	fx.Invoke(startWebhookRuntime),
 )

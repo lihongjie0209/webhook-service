@@ -13,7 +13,7 @@ import (
 
 type DeliveryStore interface {
 	ClaimDeliveries(context.Context, int, time.Duration, string) ([]Delivery, error)
-	GetSubscription(context.Context, string, string) (Subscription, error)
+	GetSubscription(context.Context, string, string, string) (Subscription, error)
 	CompleteDelivery(context.Context, Delivery, SendResult, string) error
 	FailDelivery(context.Context, Delivery, SendResult, error, *time.Time, string) error
 }
@@ -90,7 +90,7 @@ func (d *Dispatcher) dispatchBatch(ctx context.Context) error {
 }
 
 func (d *Dispatcher) dispatchOne(ctx context.Context, delivery Delivery) error {
-	subscription, err := d.store.GetSubscription(ctx, delivery.TenantID, delivery.SubscriptionID)
+	subscription, err := d.store.GetSubscription(ctx, delivery.TenantID, delivery.ApplicationID, delivery.SubscriptionID)
 	if err != nil {
 		return d.recordFailure(ctx, delivery, Subscription{}, SendResult{}, fmt.Errorf("load webhook subscription: %w", err), false)
 	}

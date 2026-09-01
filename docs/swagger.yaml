@@ -60,6 +60,7 @@ definitions:
         example: 5000
         type: integer
     required:
+    - application_id
     - endpoint_url
     - name
     - subject_filter
@@ -67,6 +68,8 @@ definitions:
     type: object
   httptransport.DeliveryBody:
     properties:
+      application_id:
+        type: string
       attempt_count:
         type: integer
       created_at:
@@ -115,6 +118,8 @@ definitions:
     type: object
   httptransport.ListDeliveriesRequest:
     properties:
+      application_id:
+        type: string
       created_from:
         example: "2026-08-01T00:00:00+08:00"
         type: string
@@ -136,6 +141,7 @@ definitions:
       tenant_id:
         type: string
     required:
+    - application_id
     - tenant_id
     type: object
   httptransport.ListSubscriptionsRequest:
@@ -155,6 +161,7 @@ definitions:
       tenant_id:
         type: string
     required:
+    - application_id
     - tenant_id
     type: object
   httptransport.MeResponseBody:
@@ -182,11 +189,14 @@ definitions:
     type: object
   httptransport.ResourceRequest:
     properties:
+      application_id:
+        type: string
       id:
         type: string
       tenant_id:
         type: string
     required:
+    - application_id
     - id
     - tenant_id
     type: object
@@ -253,6 +263,8 @@ definitions:
     type: object
   httptransport.TestSubscriptionRequest:
     properties:
+      application_id:
+        type: string
       id:
         type: string
       payload_json:
@@ -260,12 +272,15 @@ definitions:
       tenant_id:
         type: string
     required:
+    - application_id
     - id
     - payload_json
     - tenant_id
     type: object
   httptransport.UpdateSubscriptionRequest:
     properties:
+      application_id:
+        type: string
       endpoint_url:
         type: string
       expected_version:
@@ -291,6 +306,7 @@ definitions:
       timeout_ms:
         type: integer
     required:
+    - application_id
     - endpoint_url
     - expected_version
     - id
@@ -304,6 +320,8 @@ definitions:
     type: object
   httptransport.VersionedResourceRequest:
     properties:
+      application_id:
+        type: string
       expected_version:
         type: integer
       id:
@@ -311,6 +329,7 @@ definitions:
       tenant_id:
         type: string
     required:
+    - application_id
     - expected_version
     - id
     - tenant_id

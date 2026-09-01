@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lihongjie0209/microservice-platform-go/appaccess"
 	"github.com/lihongjie0209/microservice-platform-go/principal"
 	commonv1 "github.com/lihongjie0209/platform-protos/gen/go/platform/common/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -18,7 +19,7 @@ import (
 type fakeStore struct {
 	Store
 	createFn     func(context.Context, Subscription) (Subscription, error)
-	listActiveFn func(context.Context, *sqlx.Tx, string) ([]Subscription, error)
+	listActiveFn func(context.Context, *sqlx.Tx, string, string) ([]Subscription, error)
 	insertFn     func(context.Context, *sqlx.Tx, Delivery) (bool, error)
 }
 
@@ -26,8 +27,8 @@ func (f *fakeStore) CreateSubscription(ctx context.Context, value Subscription) 
 	return f.createFn(ctx, value)
 }
 
-func (f *fakeStore) ListActiveSubscriptionsTx(ctx context.Context, tx *sqlx.Tx, tenantID string) ([]Subscription, error) {
-	return f.listActiveFn(ctx, tx, tenantID)
+func (f *fakeStore) ListActiveSubscriptionsTx(ctx context.Context, tx *sqlx.Tx, tenantID, applicationID string) ([]Subscription, error) {
+	return f.listActiveFn(ctx, tx, tenantID, applicationID)
 }
 
 func (f *fakeStore) InsertDeliveryTx(ctx context.Context, tx *sqlx.Tx, value Delivery) (bool, error) {
@@ -63,7 +64,7 @@ func TestServiceCreateSubscriptionReturnsSecretOnce(t *testing.T) {
 func TestServiceCreateSubscriptionRequiresActorAndPublicEndpoint(t *testing.T) {
 	store := &fakeStore{createFn: func(_ context.Context, value Subscription) (Subscription, error) { return value, nil }}
 	service := newTestService(t, store)
-	input := CreateSubscriptionInput{TenantID: "tenant-1", Name: "events", EndpointURL: "https://hooks.example.com/events", SubjectFilter: "platform.identity.>"}
+	input := CreateSubscriptionInput{TenantID: "tenant-1", ApplicationID: "app-1", Name: "events", EndpointURL: "https://hooks.example.com/events", SubjectFilter: "platform.identity.>"}
 	if _, _, err := service.CreateSubscription(t.Context(), input); err == nil {
 		t.Fatal("CreateSubscription() accepted a missing actor")
 	}
@@ -83,7 +84,7 @@ func TestServiceCreateSubscriptionRejectsDifferentTenant(t *testing.T) {
 	service := newTestService(t, store)
 	ctx := principal.WithContext(t.Context(), principal.Principal{ID: "user-1", Type: principal.TypeUser, TenantID: "tenant-1"})
 	_, _, err := service.CreateSubscription(ctx, CreateSubscriptionInput{
-		TenantID: "tenant-2", Name: "events", EndpointURL: "https://hooks.example.com/events", SubjectFilter: "platform.identity.>",
+		TenantID: "tenant-2", ApplicationID: "app-1", Name: "events", EndpointURL: "https://hooks.example.com/events", SubjectFilter: "platform.identity.>",
 	})
 	if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("CreateSubscription() error = %v, want ErrForbidden", err)
@@ -105,16 +106,39 @@ func TestAuthorizeTenantAllowsExplicitServiceCallers(t *testing.T) {
 	}
 }
 
+func TestServiceFailsClosedWhenApplicationDecisionIsUnavailable(t *testing.T) {
+	t.Parallel()
+	service := newTestServiceWithApplications(t, &fakeStore{}, errorApplications{err: appaccess.ErrUnavailable})
+	ctx := principal.WithContext(t.Context(), principal.Principal{ID: "service-1", Type: principal.TypeServiceAccount})
+	_, err := service.ListSubscriptions(ctx, SubscriptionFilter{TenantID: "tenant-1", ApplicationID: "app-1"})
+	if !errors.Is(err, appaccess.ErrUnavailable) {
+		t.Fatalf("ListSubscriptions() error = %v, want ErrUnavailable", err)
+	}
+}
+
+func TestServiceRejectsApplicationWithoutTenantGrant(t *testing.T) {
+	t.Parallel()
+	service := newTestServiceWithApplications(t, &fakeStore{}, errorApplications{err: appaccess.ErrNotGranted})
+	ctx := principal.WithContext(t.Context(), principal.Principal{ID: "service-1", Type: principal.TypeServiceAccount})
+	_, err := service.ListSubscriptions(ctx, SubscriptionFilter{TenantID: "tenant-1", ApplicationID: "app-1"})
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("ListSubscriptions() error = %v, want ErrForbidden", err)
+	}
+}
+
 func TestServicePlanDeliveriesFiltersAndDeduplicates(t *testing.T) {
 	var inserted []Delivery
 	store := &fakeStore{
-		listActiveFn: func(_ context.Context, _ *sqlx.Tx, tenantID string) ([]Subscription, error) {
+		listActiveFn: func(_ context.Context, _ *sqlx.Tx, tenantID, applicationID string) ([]Subscription, error) {
 			if tenantID != "tenant-1" {
 				t.Fatalf("tenant ID = %q", tenantID)
 			}
+			if applicationID != "app-1" {
+				t.Fatalf("application ID = %q", applicationID)
+			}
 			return []Subscription{
-				{ID: "matching", TenantID: tenantID, SubjectFilter: "platform.identity.user.>"},
-				{ID: "different", TenantID: tenantID, SubjectFilter: "platform.tenant.>"},
+				{ID: "matching", TenantID: tenantID, ApplicationID: applicationID, SubjectFilter: "platform.identity.user.>"},
+				{ID: "different", TenantID: tenantID, ApplicationID: applicationID, SubjectFilter: "platform.tenant.>"},
 			}, nil
 		},
 		insertFn: func(_ context.Context, _ *sqlx.Tx, value Delivery) (bool, error) {
@@ -127,7 +151,7 @@ func TestServicePlanDeliveriesFiltersAndDeduplicates(t *testing.T) {
 	service.now = func() time.Time { return time.Unix(1_700_000_100, 0) }
 	envelope := &commonv1.EventEnvelope{
 		EventId: "event-1", EventType: "platform.identity.user.created.v1", AggregateId: "user-1",
-		AggregateType: "user", TenantId: "tenant-1", SchemaVersion: 1, OccurredAt: timestamppb.New(time.Unix(1_700_000_000, 0)),
+		AggregateType: "user", TenantId: "tenant-1", ApplicationId: "app-1", SchemaVersion: 1, OccurredAt: timestamppb.New(time.Unix(1_700_000_000, 0)),
 		Context: &commonv1.RequestContext{RequestId: "request-1", TraceId: "trace-1", ActorId: "actor-1"}, Payload: []byte("protobuf-payload"),
 	}
 	count, err := service.PlanDeliveriesTx(t.Context(), &sqlx.Tx{}, "platform.identity.user.created.v1", envelope)
@@ -140,9 +164,17 @@ func TestServicePlanDeliveriesFiltersAndDeduplicates(t *testing.T) {
 	if _, err := service.PlanDeliveriesTx(t.Context(), &sqlx.Tx{}, "platform.webhook.delivery.succeeded.v1", envelope); err == nil {
 		t.Fatal("PlanDeliveriesTx() accepted recursive webhook event")
 	}
+	envelope.ApplicationId = ""
+	if _, err := service.PlanDeliveriesTx(t.Context(), &sqlx.Tx{}, "platform.identity.user.created.v1", envelope); err == nil {
+		t.Fatal("PlanDeliveriesTx() accepted an event without application scope")
+	}
 }
 
 func newTestService(t *testing.T, store Store) *Service {
+	return newTestServiceWithApplications(t, store, allowApplications{})
+}
+
+func newTestServiceWithApplications(t *testing.T, store Store, applications appaccess.Verifier) *Service {
 	t.Helper()
 	box, err := NewSecretBox(base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{8}, 32)), "test-v1")
 	if err != nil {
@@ -155,9 +187,17 @@ func newTestService(t *testing.T, store Store) *Service {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := NewService(store, box, policy)
+	service, err := NewService(store, box, policy, applications)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return service
 }
+
+type allowApplications struct{}
+
+func (allowApplications) Verify(context.Context, string, string) error { return nil }
+
+type errorApplications struct{ err error }
+
+func (f errorApplications) Verify(context.Context, string, string) error { return f.err }

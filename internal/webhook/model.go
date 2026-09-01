@@ -52,6 +52,7 @@ type Delivery struct {
 	ID             string     `db:"id" json:"id"`
 	SubscriptionID string     `db:"subscription_id" json:"subscription_id"`
 	TenantID       string     `db:"tenant_id" json:"tenant_id"`
+	ApplicationID  string     `db:"application_id" json:"application_id"`
 	EventID        string     `db:"event_id" json:"event_id"`
 	EventSubject   string     `db:"event_subject" json:"event_subject"`
 	Payload        []byte     `db:"payload" json:"-"`
@@ -81,6 +82,7 @@ type SubscriptionFilter struct {
 
 type DeliveryFilter struct {
 	TenantID       string
+	ApplicationID  string
 	SubscriptionID string
 	Status         string
 	CreatedFrom    *time.Time

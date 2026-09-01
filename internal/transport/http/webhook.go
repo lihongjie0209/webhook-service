@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lihongjie0209/microservice-platform-go/appaccess"
 	"github.com/lihongjie0209/webhook-service/internal/apperror"
 	webhookdomain "github.com/lihongjie0209/webhook-service/internal/webhook"
 )
@@ -44,6 +45,7 @@ type DeliveryBody struct {
 	ID             string     `json:"id"`
 	SubscriptionID string     `json:"subscription_id"`
 	TenantID       string     `json:"tenant_id"`
+	ApplicationID  string     `json:"application_id"`
 	EventID        string     `json:"event_id"`
 	EventSubject   string     `json:"event_subject"`
 	Status         string     `json:"status"`
@@ -63,7 +65,7 @@ type DeliveryBody struct {
 
 type CreateSubscriptionRequest struct {
 	TenantID            string `json:"tenant_id" binding:"required"`
-	ApplicationID       string `json:"application_id"`
+	ApplicationID       string `json:"application_id" binding:"required"`
 	Name                string `json:"name" binding:"required"`
 	EndpointURL         string `json:"endpoint_url" binding:"required" example:"https://hooks.example.com/events"`
 	SubjectFilter       string `json:"subject_filter" binding:"required" example:"platform.identity.user.>"`
@@ -80,6 +82,7 @@ type CreateSubscriptionBody struct {
 type UpdateSubscriptionRequest struct {
 	ID                  string `json:"id" binding:"required"`
 	TenantID            string `json:"tenant_id" binding:"required"`
+	ApplicationID       string `json:"application_id" binding:"required"`
 	Name                string `json:"name" binding:"required"`
 	EndpointURL         string `json:"endpoint_url" binding:"required"`
 	SubjectFilter       string `json:"subject_filter" binding:"required"`
@@ -91,19 +94,21 @@ type UpdateSubscriptionRequest struct {
 }
 
 type ResourceRequest struct {
-	ID       string `json:"id" binding:"required"`
-	TenantID string `json:"tenant_id" binding:"required"`
+	ID            string `json:"id" binding:"required"`
+	TenantID      string `json:"tenant_id" binding:"required"`
+	ApplicationID string `json:"application_id" binding:"required"`
 }
 
 type VersionedResourceRequest struct {
 	ID              string `json:"id" binding:"required"`
 	TenantID        string `json:"tenant_id" binding:"required"`
+	ApplicationID   string `json:"application_id" binding:"required"`
 	ExpectedVersion int64  `json:"expected_version" binding:"required"`
 }
 
 type ListSubscriptionsRequest struct {
 	TenantID      string      `json:"tenant_id" binding:"required"`
-	ApplicationID string      `json:"application_id"`
+	ApplicationID string      `json:"application_id" binding:"required"`
 	Status        string      `json:"status" enums:"active,paused,disabled"`
 	Search        string      `json:"search"`
 	Page          PageRequest `json:"page"`
@@ -120,13 +125,15 @@ type RotateSecretBody struct {
 }
 
 type TestSubscriptionRequest struct {
-	ID          string          `json:"id" binding:"required"`
-	TenantID    string          `json:"tenant_id" binding:"required"`
-	PayloadJSON json.RawMessage `json:"payload_json" binding:"required" swaggertype:"object"`
+	ID            string          `json:"id" binding:"required"`
+	TenantID      string          `json:"tenant_id" binding:"required"`
+	ApplicationID string          `json:"application_id" binding:"required"`
+	PayloadJSON   json.RawMessage `json:"payload_json" binding:"required" swaggertype:"object"`
 }
 
 type ListDeliveriesRequest struct {
 	TenantID       string      `json:"tenant_id" binding:"required"`
+	ApplicationID  string      `json:"application_id" binding:"required"`
 	SubscriptionID string      `json:"subscription_id"`
 	Status         string      `json:"status" enums:"pending,processing,succeeded,retrying,dead"`
 	CreatedFrom    string      `json:"created_from" example:"2026-08-01T00:00:00+08:00"`
@@ -181,7 +188,7 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 		return
 	}
 	value, err := h.webhook.UpdateSubscription(c.Request.Context(), webhookdomain.UpdateSubscriptionInput{
-		ID: request.ID, TenantID: request.TenantID, Name: request.Name, EndpointURL: request.EndpointURL,
+		ID: request.ID, TenantID: request.TenantID, ApplicationID: request.ApplicationID, Name: request.Name, EndpointURL: request.EndpointURL,
 		SubjectFilter: request.SubjectFilter, Status: request.Status, TimeoutMS: request.TimeoutMS,
 		MaxAttempts: request.MaxAttempts, RetryInitialSeconds: request.RetryInitialSeconds, ExpectedVersion: request.ExpectedVersion,
 	})
@@ -206,7 +213,7 @@ func (h *Handler) GetSubscription(c *gin.Context) {
 	if !h.bind(c, &request) || !h.available(c) {
 		return
 	}
-	value, err := h.webhook.GetSubscription(c.Request.Context(), request.TenantID, request.ID)
+	value, err := h.webhook.GetSubscription(c.Request.Context(), request.TenantID, request.ApplicationID, request.ID)
 	if err != nil {
 		h.failWebhook(c, err)
 		return
@@ -253,7 +260,7 @@ func (h *Handler) RotateSubscriptionSecret(c *gin.Context) {
 	if !h.bind(c, &request) || !h.available(c) {
 		return
 	}
-	value, secret, err := h.webhook.RotateSecret(c.Request.Context(), request.TenantID, request.ID, request.ExpectedVersion)
+	value, secret, err := h.webhook.RotateSecret(c.Request.Context(), request.TenantID, request.ApplicationID, request.ID, request.ExpectedVersion)
 	if err != nil {
 		h.failWebhook(c, err)
 		return
@@ -275,7 +282,7 @@ func (h *Handler) DeleteSubscription(c *gin.Context) {
 	if !h.bind(c, &request) || !h.available(c) {
 		return
 	}
-	if err := h.webhook.DeleteSubscription(c.Request.Context(), request.TenantID, request.ID, request.ExpectedVersion); err != nil {
+	if err := h.webhook.DeleteSubscription(c.Request.Context(), request.TenantID, request.ApplicationID, request.ID, request.ExpectedVersion); err != nil {
 		h.failWebhook(c, err)
 		return
 	}
@@ -296,7 +303,7 @@ func (h *Handler) TestSubscription(c *gin.Context) {
 	if !h.bind(c, &request) || !h.available(c) {
 		return
 	}
-	value, err := h.webhook.TestSubscription(c.Request.Context(), request.TenantID, request.ID, request.PayloadJSON)
+	value, err := h.webhook.TestSubscription(c.Request.Context(), request.TenantID, request.ApplicationID, request.ID, request.PayloadJSON)
 	if err != nil {
 		h.failWebhook(c, err)
 		return
@@ -318,7 +325,7 @@ func (h *Handler) GetDelivery(c *gin.Context) {
 	if !h.bind(c, &request) || !h.available(c) {
 		return
 	}
-	value, err := h.webhook.GetDelivery(c.Request.Context(), request.TenantID, request.ID)
+	value, err := h.webhook.GetDelivery(c.Request.Context(), request.TenantID, request.ApplicationID, request.ID)
 	if err != nil {
 		h.failWebhook(c, err)
 		return
@@ -351,7 +358,7 @@ func (h *Handler) ListDeliveries(c *gin.Context) {
 		return
 	}
 	result, err := h.webhook.ListDeliveries(c.Request.Context(), webhookdomain.DeliveryFilter{
-		TenantID: request.TenantID, SubscriptionID: request.SubscriptionID, Status: request.Status,
+		TenantID: request.TenantID, ApplicationID: request.ApplicationID, SubscriptionID: request.SubscriptionID, Status: request.Status,
 		CreatedFrom: createdFrom, CreatedUntil: createdUntil, Page: request.Page.Page, PageSize: request.Page.PageSize,
 	})
 	if err != nil {
@@ -375,7 +382,7 @@ func (h *Handler) ReplayDelivery(c *gin.Context) {
 	if !h.bind(c, &request) || !h.available(c) {
 		return
 	}
-	value, err := h.webhook.ReplayDelivery(c.Request.Context(), request.TenantID, request.ID, request.ExpectedVersion)
+	value, err := h.webhook.ReplayDelivery(c.Request.Context(), request.TenantID, request.ApplicationID, request.ID, request.ExpectedVersion)
 	if err != nil {
 		h.failWebhook(c, err)
 		return
@@ -411,6 +418,8 @@ func (h *Handler) failWebhook(c *gin.Context, err error) {
 		Fail(c, h.logger, apperror.NotFound("webhook resource not found"))
 	case errors.Is(err, webhookdomain.ErrVersionConflict), errors.Is(err, webhookdomain.ErrDuplicate):
 		Fail(c, h.logger, apperror.Conflict("webhook resource conflict", err))
+	case errors.Is(err, appaccess.ErrUnavailable):
+		Fail(c, h.logger, apperror.Unavailable("application authorization is unavailable", err))
 	default:
 		Fail(c, h.logger, apperror.Internal(err))
 	}
@@ -447,7 +456,7 @@ func subscriptionBodies(values []webhookdomain.Subscription) []SubscriptionBody 
 
 func deliveryBody(value webhookdomain.Delivery) DeliveryBody {
 	return DeliveryBody{
-		ID: value.ID, SubscriptionID: value.SubscriptionID, TenantID: value.TenantID, EventID: value.EventID,
+		ID: value.ID, SubscriptionID: value.SubscriptionID, TenantID: value.TenantID, ApplicationID: value.ApplicationID, EventID: value.EventID,
 		EventSubject: value.EventSubject, Status: value.Status, AttemptCount: value.AttemptCount,
 		NextAttemptAt: value.NextAttemptAt, LastAttemptAt: value.LastAttemptAt, ResponseStatus: value.ResponseStatus,
 		ResponseBody: value.ResponseBody, ErrorMessage: value.ErrorMessage, DeliveredAt: value.DeliveredAt,

@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	applicationv1 "github.com/lihongjie0209/platform-protos/gen/go/platform/application/v1"
 	webhookv1 "github.com/lihongjie0209/platform-protos/gen/go/platform/webhook/v1"
 	"github.com/lihongjie0209/webhook-service/internal/app"
 	"github.com/lihongjie0209/webhook-service/internal/auth"
@@ -56,6 +57,15 @@ func TestHTTPAndGRPCEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	applicationAddress := freeAddress(t)
+	applicationListener, err := net.Listen("tcp", applicationAddress)
+	if err != nil {
+		t.Fatal(err)
+	}
+	applicationServer := grpc.NewServer()
+	applicationv1.RegisterApplicationServiceServer(applicationServer, &applicationStub{})
+	go func() { _ = applicationServer.Serve(applicationListener) }()
+	t.Cleanup(applicationServer.Stop)
 
 	httpAddress := freeAddress(t)
 	grpcAddress := freeAddress(t)
@@ -77,6 +87,9 @@ func TestHTTPAndGRPCEndToEnd(t *testing.T) {
 		User:          config.User{CacheTTL: time.Minute, LockTTL: 10 * time.Second, LockRetryDelay: 20 * time.Millisecond},
 		Idempotency:   config.Idempotency{Enabled: true, ProcessingTTL: 30 * time.Second, ResultTTL: time.Hour, FailureTTL: time.Minute},
 		Webhook:       config.Webhook{EncryptionKey: base64.StdEncoding.EncodeToString([]byte(secret)), EncryptionKeyID: "integration-v1", AllowedPorts: []int{443}, MaxResponseBytes: 1024, PollInterval: time.Second, ClaimLease: 30 * time.Second, Workers: 1, BatchSize: 10, Retention: 30 * 24 * time.Hour, CleanupInterval: time.Hour},
+		Outbound: config.Outbound{GRPC: map[string]config.GRPCUpstream{
+			"application": {Target: applicationAddress, Timeout: 5 * time.Second, Retry: config.Retry{MaxAttempts: 1, InitialBackoff: 10 * time.Millisecond, MaxBackoff: time.Second}},
+		}},
 	}
 	application := app.New(cfg)
 	if err := application.Start(ctx); err != nil {
@@ -99,7 +112,7 @@ func TestHTTPAndGRPCEndToEnd(t *testing.T) {
 	if status := postJSON(t, baseURL+"/api/v1/me", "Bearer "+token, "", `{}`); status != http.StatusOK {
 		t.Fatalf("JWT status = %d", status)
 	}
-	if status := postJSON(t, baseURL+"/api/v1/webhooks/subscriptions/list", "Bearer "+token, "", `{"tenant_id":"tenant-1","page":{"page":1,"page_size":20}}`); status != http.StatusOK {
+	if status := postJSON(t, baseURL+"/api/v1/webhooks/subscriptions/list", "Bearer "+token, "", `{"tenant_id":"tenant-1","application_id":"application-1","page":{"page":1,"page_size":20}}`); status != http.StatusOK {
 		t.Fatalf("webhook list status = %d", status)
 	}
 
@@ -113,9 +126,21 @@ func TestHTTPAndGRPCEndToEnd(t *testing.T) {
 		t.Fatalf("health = %v, %v", healthResponse, err)
 	}
 	pskCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "PSK "+secret)
-	if _, err := webhookv1.NewWebhookServiceClient(connection).ListSubscriptions(pskCtx, &webhookv1.ListSubscriptionsRequest{TenantId: "tenant-1"}); err != nil {
+	if _, err := webhookv1.NewWebhookServiceClient(connection).ListSubscriptions(pskCtx, &webhookv1.ListSubscriptionsRequest{TenantId: "tenant-1", ApplicationId: "application-1"}); err != nil {
 		t.Fatalf("PSK ListSubscriptions: %v", err)
 	}
+}
+
+type applicationStub struct {
+	applicationv1.UnimplementedApplicationServiceServer
+}
+
+func (*applicationStub) BatchCheckTenantApplications(_ context.Context, request *applicationv1.BatchCheckTenantApplicationsRequest) (*applicationv1.BatchCheckTenantApplicationsResponse, error) {
+	decisions := make([]*applicationv1.TenantApplicationDecision, 0, len(request.GetApplicationIds()))
+	for _, applicationID := range request.GetApplicationIds() {
+		decisions = append(decisions, &applicationv1.TenantApplicationDecision{ApplicationId: applicationID, Granted: true})
+	}
+	return &applicationv1.BatchCheckTenantApplicationsResponse{Decisions: decisions}, nil
 }
 
 func freeAddress(t *testing.T) string {

@@ -26,6 +26,10 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
+type allowApplicationVerifier struct{}
+
+func (allowApplicationVerifier) Verify(context.Context, string, string) error { return nil }
+
 func TestJetStreamEventCreatesOneInboxProtectedDelivery(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 	defer cancel()
@@ -49,7 +53,7 @@ func TestJetStreamEventCreatesOneInboxProtectedDelivery(t *testing.T) {
 	}
 	now := time.Now()
 	if _, err := repository.CreateSubscription(ctx, webhookdomain.Subscription{
-		ID: "subscription-event", TenantID: "tenant-event", Name: "identity events", EndpointURL: "https://hooks.example.com/events",
+		ID: "subscription-event", TenantID: "tenant-event", ApplicationID: "application-event", Name: "identity events", EndpointURL: "https://hooks.example.com/events",
 		SubjectFilter: "platform.identity.user.>", Status: webhookdomain.SubscriptionActive, TimeoutMS: 1000, MaxAttempts: 3,
 		RetryInitialSeconds: 1, SecretCiphertext: []byte("not-used-by-planner"), SecretKeyID: "test-v1", SecretVersion: 1,
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "test", UpdatedBy: "test",
@@ -64,7 +68,7 @@ func TestJetStreamEventCreatesOneInboxProtectedDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := webhookdomain.NewService(repository, box, policy)
+	service, err := webhookdomain.NewService(repository, box, policy, allowApplicationVerifier{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +102,7 @@ func TestJetStreamEventCreatesOneInboxProtectedDelivery(t *testing.T) {
 	}()
 	envelope, err := platformeventbus.NewEnvelope(platformeventbus.Metadata{
 		EventID: "event-webhook-1", EventType: "platform.identity.user.created.v1", AggregateID: "user-1",
-		AggregateType: "user", TenantID: "tenant-event", SchemaVersion: 1,
+		AggregateType: "user", TenantID: "tenant-event", ApplicationID: "application-event", SchemaVersion: 1,
 	}, &identityv1.UserStatusChangedEvent{UserId: "user-1", Reason: "created"})
 	if err != nil {
 		t.Fatal(err)

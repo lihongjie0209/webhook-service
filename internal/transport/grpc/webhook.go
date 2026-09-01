@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/lihongjie0209/microservice-platform-go/appaccess"
 	commonv1 "github.com/lihongjie0209/platform-protos/gen/go/platform/common/v1"
 	webhookv1 "github.com/lihongjie0209/platform-protos/gen/go/platform/webhook/v1"
 	webhookdomain "github.com/lihongjie0209/webhook-service/internal/webhook"
@@ -38,7 +39,7 @@ func (s *webhookServer) UpdateSubscription(ctx context.Context, request *webhook
 		return nil, err
 	}
 	value, err := s.service.UpdateSubscription(ctx, webhookdomain.UpdateSubscriptionInput{
-		ID: request.GetId(), TenantID: request.GetTenantId(), Name: request.GetName(), EndpointURL: request.GetEndpointUrl(),
+		ID: request.GetId(), TenantID: request.GetTenantId(), ApplicationID: request.GetApplicationId(), Name: request.GetName(), EndpointURL: request.GetEndpointUrl(),
 		SubjectFilter: request.GetSubjectFilter(), Status: subscriptionStatusDomain(request.GetStatus()), TimeoutMS: int(request.GetTimeoutMs()),
 		MaxAttempts: int(request.GetMaxAttempts()), RetryInitialSeconds: int(request.GetRetryInitialSeconds()), ExpectedVersion: request.GetExpectedVersion(),
 	})
@@ -52,7 +53,7 @@ func (s *webhookServer) GetSubscription(ctx context.Context, request *webhookv1.
 	if err := s.available(); err != nil {
 		return nil, err
 	}
-	value, err := s.service.GetSubscription(ctx, request.GetTenantId(), request.GetId())
+	value, err := s.service.GetSubscription(ctx, request.GetTenantId(), request.GetApplicationId(), request.GetId())
 	if err != nil {
 		return nil, grpcError(err)
 	}
@@ -82,7 +83,7 @@ func (s *webhookServer) RotateSubscriptionSecret(ctx context.Context, request *w
 	if err := s.available(); err != nil {
 		return nil, err
 	}
-	value, secret, err := s.service.RotateSecret(ctx, request.GetTenantId(), request.GetId(), request.GetExpectedVersion())
+	value, secret, err := s.service.RotateSecret(ctx, request.GetTenantId(), request.GetApplicationId(), request.GetId(), request.GetExpectedVersion())
 	if err != nil {
 		return nil, grpcError(err)
 	}
@@ -93,7 +94,7 @@ func (s *webhookServer) DeleteSubscription(ctx context.Context, request *webhook
 	if err := s.available(); err != nil {
 		return nil, err
 	}
-	if err := s.service.DeleteSubscription(ctx, request.GetTenantId(), request.GetId(), request.GetExpectedVersion()); err != nil {
+	if err := s.service.DeleteSubscription(ctx, request.GetTenantId(), request.GetApplicationId(), request.GetId(), request.GetExpectedVersion()); err != nil {
 		return nil, grpcError(err)
 	}
 	return &webhookv1.DeleteSubscriptionResponse{}, nil
@@ -103,7 +104,7 @@ func (s *webhookServer) TestSubscription(ctx context.Context, request *webhookv1
 	if err := s.available(); err != nil {
 		return nil, err
 	}
-	value, err := s.service.TestSubscription(ctx, request.GetTenantId(), request.GetId(), []byte(request.GetPayloadJson()))
+	value, err := s.service.TestSubscription(ctx, request.GetTenantId(), request.GetApplicationId(), request.GetId(), []byte(request.GetPayloadJson()))
 	if err != nil {
 		return nil, grpcError(err)
 	}
@@ -114,7 +115,7 @@ func (s *webhookServer) GetDelivery(ctx context.Context, request *webhookv1.GetD
 	if err := s.available(); err != nil {
 		return nil, err
 	}
-	value, err := s.service.GetDelivery(ctx, request.GetTenantId(), request.GetId())
+	value, err := s.service.GetDelivery(ctx, request.GetTenantId(), request.GetApplicationId(), request.GetId())
 	if err != nil {
 		return nil, grpcError(err)
 	}
@@ -127,7 +128,7 @@ func (s *webhookServer) ListDeliveries(ctx context.Context, request *webhookv1.L
 	}
 	page, pageSize := pageRequest(request.GetPage())
 	result, err := s.service.ListDeliveries(ctx, webhookdomain.DeliveryFilter{
-		TenantID: request.GetTenantId(), SubscriptionID: request.GetSubscriptionId(), Status: deliveryStatusDomain(request.GetStatus()),
+		TenantID: request.GetTenantId(), ApplicationID: request.GetApplicationId(), SubscriptionID: request.GetSubscriptionId(), Status: deliveryStatusDomain(request.GetStatus()),
 		CreatedFrom: timePointer(request.GetCreatedFrom()), CreatedUntil: timePointer(request.GetCreatedUntil()), Page: page, PageSize: pageSize,
 	})
 	if err != nil {
@@ -144,7 +145,7 @@ func (s *webhookServer) ReplayDelivery(ctx context.Context, request *webhookv1.R
 	if err := s.available(); err != nil {
 		return nil, err
 	}
-	value, err := s.service.ReplayDelivery(ctx, request.GetTenantId(), request.GetId(), request.GetExpectedVersion())
+	value, err := s.service.ReplayDelivery(ctx, request.GetTenantId(), request.GetApplicationId(), request.GetId(), request.GetExpectedVersion())
 	if err != nil {
 		return nil, grpcError(err)
 	}
@@ -174,6 +175,8 @@ func grpcError(err error) error {
 		return status.Error(codes.Unauthenticated, "authenticated actor is required")
 	case errors.Is(err, webhookdomain.ErrForbidden):
 		return status.Error(codes.PermissionDenied, "webhook tenant access denied")
+	case errors.Is(err, appaccess.ErrUnavailable):
+		return status.Error(codes.Unavailable, "application authorization is unavailable")
 	default:
 		return status.Error(codes.Internal, "internal server error")
 	}
@@ -191,7 +194,7 @@ func subscriptionProto(value webhookdomain.Subscription) *webhookv1.Subscription
 
 func deliveryProto(value webhookdomain.Delivery) *webhookv1.Delivery {
 	return &webhookv1.Delivery{
-		Id: value.ID, SubscriptionId: value.SubscriptionID, TenantId: value.TenantID, EventId: value.EventID,
+		Id: value.ID, SubscriptionId: value.SubscriptionID, TenantId: value.TenantID, ApplicationId: value.ApplicationID, EventId: value.EventID,
 		EventSubject: value.EventSubject, Status: deliveryStatusProto(value.Status), AttemptCount: uint32(value.AttemptCount),
 		NextAttemptAt: timestamppb.New(value.NextAttemptAt), LastAttemptAt: timestampPointer(value.LastAttemptAt),
 		ResponseStatus: int32(value.ResponseStatus), ResponseBody: value.ResponseBody, ErrorMessage: value.ErrorMessage,
