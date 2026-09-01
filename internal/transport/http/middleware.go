@@ -248,16 +248,16 @@ func Authorization(enabled bool, authorizer platformauthz.Authorizer, logger *sl
 
 func webhookHTTPRequirement(route string) (platformauthz.Requirement, bool) {
 	requirements := map[string]platformauthz.Requirement{
-		"/api/v1/webhooks/subscriptions/create":        {Resource: "webhook.subscription", Action: "create"},
-		"/api/v1/webhooks/subscriptions/update":        {Resource: "webhook.subscription", Action: "update"},
-		"/api/v1/webhooks/subscriptions/get":           {Resource: "webhook.subscription", Action: "read"},
-		"/api/v1/webhooks/subscriptions/list":          {Resource: "webhook.subscription", Action: "list"},
-		"/api/v1/webhooks/subscriptions/rotate-secret": {Resource: "webhook.subscription", Action: "rotate-secret"},
-		"/api/v1/webhooks/subscriptions/delete":        {Resource: "webhook.subscription", Action: "delete"},
-		"/api/v1/webhooks/subscriptions/test":          {Resource: "webhook.subscription", Action: "test"},
-		"/api/v1/webhooks/deliveries/get":              {Resource: "webhook.delivery", Action: "read"},
-		"/api/v1/webhooks/deliveries/list":             {Resource: "webhook.delivery", Action: "list"},
-		"/api/v1/webhooks/deliveries/replay":           {Resource: "webhook.delivery", Action: "replay"},
+		"/api/v1/webhooks/subscriptions/create":        {Resource: "webhook.subscription", Action: "create", Scope: platformauthz.ScopePrincipal},
+		"/api/v1/webhooks/subscriptions/update":        {Resource: "webhook.subscription", Action: "update", Scope: platformauthz.ScopePrincipal},
+		"/api/v1/webhooks/subscriptions/get":           {Resource: "webhook.subscription", Action: "read", Scope: platformauthz.ScopePrincipal},
+		"/api/v1/webhooks/subscriptions/list":          {Resource: "webhook.subscription", Action: "list", Scope: platformauthz.ScopePrincipal},
+		"/api/v1/webhooks/subscriptions/rotate-secret": {Resource: "webhook.subscription", Action: "rotate-secret", Scope: platformauthz.ScopePrincipal},
+		"/api/v1/webhooks/subscriptions/delete":        {Resource: "webhook.subscription", Action: "delete", Scope: platformauthz.ScopePrincipal},
+		"/api/v1/webhooks/subscriptions/test":          {Resource: "webhook.subscription", Action: "test", Scope: platformauthz.ScopePrincipal},
+		"/api/v1/webhooks/deliveries/get":              {Resource: "webhook.delivery", Action: "read", Scope: platformauthz.ScopePrincipal},
+		"/api/v1/webhooks/deliveries/list":             {Resource: "webhook.delivery", Action: "list", Scope: platformauthz.ScopePrincipal},
+		"/api/v1/webhooks/deliveries/replay":           {Resource: "webhook.delivery", Action: "replay", Scope: platformauthz.ScopePrincipal},
 	}
 	requirement, ok := requirements[route]
 	return requirement, ok

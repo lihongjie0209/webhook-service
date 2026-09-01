@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	platformauthz "github.com/lihongjie0209/microservice-platform-go/authz"
 	"github.com/lihongjie0209/microservice-platform-go/principal"
 	webhookv1 "github.com/lihongjie0209/platform-protos/gen/go/platform/webhook/v1"
 	"github.com/lihongjie0209/webhook-service/internal/auth"
@@ -30,7 +31,7 @@ func TestWebhookGRPCRequirementCoversEveryBusinessMethod(t *testing.T) {
 		webhookv1.WebhookService_ListDeliveries_FullMethodName, webhookv1.WebhookService_ReplayDelivery_FullMethodName,
 	}
 	for _, method := range methods {
-		if requirement, ok := resolve(method); !ok || requirement.Resource == "" || requirement.Action == "" {
+		if requirement, ok := resolve(method); !ok || requirement.Resource == "" || requirement.Action == "" || requirement.Scope != platformauthz.ScopePrincipal {
 			t.Fatalf("method %q requirement = %+v, %v", method, requirement, ok)
 		}
 	}

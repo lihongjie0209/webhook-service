@@ -31,7 +31,7 @@ func TestWebhookHTTPRequirementCoversEveryBusinessRoute(t *testing.T) {
 		"/api/v1/webhooks/subscriptions/test", "/api/v1/webhooks/deliveries/get", "/api/v1/webhooks/deliveries/list",
 		"/api/v1/webhooks/deliveries/replay",
 	} {
-		if requirement, ok := webhookHTTPRequirement(route); !ok || requirement.Resource == "" || requirement.Action == "" {
+		if requirement, ok := webhookHTTPRequirement(route); !ok || requirement.Resource == "" || requirement.Action == "" || requirement.Scope != platformauthz.ScopePrincipal {
 			t.Fatalf("route %q requirement = %+v, %v", route, requirement, ok)
 		}
 	}

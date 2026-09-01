@@ -72,16 +72,16 @@ func webhookGRPCRequirement(enabled bool) platformauthz.GRPCResolver {
 			return platformauthz.Requirement{}, false
 		}
 		requirements := map[string]platformauthz.Requirement{
-			webhookv1.WebhookService_CreateSubscription_FullMethodName:       {Resource: "webhook.subscription", Action: "create"},
-			webhookv1.WebhookService_UpdateSubscription_FullMethodName:       {Resource: "webhook.subscription", Action: "update"},
-			webhookv1.WebhookService_GetSubscription_FullMethodName:          {Resource: "webhook.subscription", Action: "read"},
-			webhookv1.WebhookService_ListSubscriptions_FullMethodName:        {Resource: "webhook.subscription", Action: "list"},
-			webhookv1.WebhookService_RotateSubscriptionSecret_FullMethodName: {Resource: "webhook.subscription", Action: "rotate-secret"},
-			webhookv1.WebhookService_DeleteSubscription_FullMethodName:       {Resource: "webhook.subscription", Action: "delete"},
-			webhookv1.WebhookService_TestSubscription_FullMethodName:         {Resource: "webhook.subscription", Action: "test"},
-			webhookv1.WebhookService_GetDelivery_FullMethodName:              {Resource: "webhook.delivery", Action: "read"},
-			webhookv1.WebhookService_ListDeliveries_FullMethodName:           {Resource: "webhook.delivery", Action: "list"},
-			webhookv1.WebhookService_ReplayDelivery_FullMethodName:           {Resource: "webhook.delivery", Action: "replay"},
+			webhookv1.WebhookService_CreateSubscription_FullMethodName:       {Resource: "webhook.subscription", Action: "create", Scope: platformauthz.ScopePrincipal},
+			webhookv1.WebhookService_UpdateSubscription_FullMethodName:       {Resource: "webhook.subscription", Action: "update", Scope: platformauthz.ScopePrincipal},
+			webhookv1.WebhookService_GetSubscription_FullMethodName:          {Resource: "webhook.subscription", Action: "read", Scope: platformauthz.ScopePrincipal},
+			webhookv1.WebhookService_ListSubscriptions_FullMethodName:        {Resource: "webhook.subscription", Action: "list", Scope: platformauthz.ScopePrincipal},
+			webhookv1.WebhookService_RotateSubscriptionSecret_FullMethodName: {Resource: "webhook.subscription", Action: "rotate-secret", Scope: platformauthz.ScopePrincipal},
+			webhookv1.WebhookService_DeleteSubscription_FullMethodName:       {Resource: "webhook.subscription", Action: "delete", Scope: platformauthz.ScopePrincipal},
+			webhookv1.WebhookService_TestSubscription_FullMethodName:         {Resource: "webhook.subscription", Action: "test", Scope: platformauthz.ScopePrincipal},
+			webhookv1.WebhookService_GetDelivery_FullMethodName:              {Resource: "webhook.delivery", Action: "read", Scope: platformauthz.ScopePrincipal},
+			webhookv1.WebhookService_ListDeliveries_FullMethodName:           {Resource: "webhook.delivery", Action: "list", Scope: platformauthz.ScopePrincipal},
+			webhookv1.WebhookService_ReplayDelivery_FullMethodName:           {Resource: "webhook.delivery", Action: "replay", Scope: platformauthz.ScopePrincipal},
 		}
 		requirement, ok := requirements[method]
 		return requirement, ok
