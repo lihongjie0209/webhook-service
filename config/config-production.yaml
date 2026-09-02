@@ -32,6 +32,8 @@ rate_limit:
   enabled: true
 idempotency:
   enabled: true
+  http_paths: [/api/v1/webhooks/subscriptions/create, /api/v1/webhooks/subscriptions/update, /api/v1/webhooks/subscriptions/rotate-secret, /api/v1/webhooks/subscriptions/delete, /api/v1/webhooks/subscriptions/test, /api/v1/webhooks/deliveries/replay]
+  grpc_methods: [/platform.webhook.v1.WebhookService/CreateSubscription, /platform.webhook.v1.WebhookService/UpdateSubscription, /platform.webhook.v1.WebhookService/RotateSubscriptionSecret, /platform.webhook.v1.WebhookService/DeleteSubscription, /platform.webhook.v1.WebhookService/TestSubscription, /platform.webhook.v1.WebhookService/ReplayDelivery]
 observability:
   metrics_enabled: true
   tracing_enabled: false
