@@ -190,6 +190,13 @@ func (s *Service) ListSubscriptions(ctx context.Context, filter SubscriptionFilt
 	return s.store.ListSubscriptions(ctx, filter)
 }
 
+// ListDeliverySubscriptions returns the active subscriptions that can be used
+// to filter delivery history without requiring subscription-management access.
+func (s *Service) ListDeliverySubscriptions(ctx context.Context, filter SubscriptionFilter) (Page[Subscription], error) {
+	filter.Status = SubscriptionActive
+	return s.ListSubscriptions(ctx, filter)
+}
+
 func (s *Service) GetDelivery(ctx context.Context, tenantID, applicationID, id string) (Delivery, error) {
 	if tenantID == "" || applicationID == "" || id == "" {
 		return Delivery{}, invalid("tenant ID and delivery ID are required")

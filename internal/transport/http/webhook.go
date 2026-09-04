@@ -142,6 +142,13 @@ type ListDeliveriesRequest struct {
 	Page           PageRequest `json:"page"`
 }
 
+type ListDeliverySubscriptionsRequest struct {
+	TenantID      string      `json:"tenant_id" binding:"required"`
+	ApplicationID string      `json:"application_id" binding:"required"`
+	Search        string      `json:"search"`
+	Page          PageRequest `json:"page"`
+}
+
 type DeliveryPageBody struct {
 	Items []DeliveryBody `json:"items"`
 	Page  PageResult     `json:"page"`
@@ -367,6 +374,31 @@ func (h *Handler) ListDeliveries(c *gin.Context) {
 		return
 	}
 	OK(c, DeliveryPageBody{Items: deliveryBodies(result.Items), Page: PageResult{Total: result.Total, Page: result.Page, PageSize: result.PageSize}})
+}
+
+// ListDeliverySubscriptions godoc
+// @Summary Search active subscriptions available to delivery history
+// @Tags webhook-deliveries
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param request body ListDeliverySubscriptionsRequest true "Search and pagination"
+// @Success 200 {object} Response{body=SubscriptionPageBody}
+// @Router /api/v1/webhooks/deliveries/subscriptions/list [post]
+func (h *Handler) ListDeliverySubscriptions(c *gin.Context) {
+	var request ListDeliverySubscriptionsRequest
+	if !h.bind(c, &request) || !h.available(c) {
+		return
+	}
+	result, err := h.webhook.ListDeliverySubscriptions(c.Request.Context(), webhookdomain.SubscriptionFilter{
+		TenantID: request.TenantID, ApplicationID: request.ApplicationID, Search: request.Search,
+		Page: request.Page.Page, PageSize: request.Page.PageSize,
+	})
+	if err != nil {
+		h.failWebhook(c, err)
+		return
+	}
+	OK(c, SubscriptionPageBody{Items: subscriptionBodies(result.Items), Page: PageResult{Total: result.Total, Page: result.Page, PageSize: result.PageSize}})
 }
 
 // ReplayDelivery godoc

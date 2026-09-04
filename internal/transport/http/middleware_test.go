@@ -77,7 +77,7 @@ func TestIdempotencyExecutionCompletesAndReplaysWebhookMutation(t *testing.T) {
 
 func TestIdempotencyExecutionBypassesWebhookQueries(t *testing.T) {
 	t.Parallel()
-	for _, route := range []string{"/api/v1/webhooks/subscriptions/get", "/api/v1/webhooks/subscriptions/list", "/api/v1/webhooks/deliveries/get", "/api/v1/webhooks/deliveries/list"} {
+	for _, route := range []string{"/api/v1/webhooks/subscriptions/get", "/api/v1/webhooks/subscriptions/list", "/api/v1/webhooks/deliveries/get", "/api/v1/webhooks/deliveries/list", "/api/v1/webhooks/deliveries/subscriptions/list"} {
 		t.Run(route, func(t *testing.T) {
 			manager := &fakeIdempotencyManager{decision: idempotency.Decision{State: idempotency.StateConflict}}
 			calls := 0
@@ -108,7 +108,7 @@ func TestWebhookHTTPRequirementCoversEveryBusinessRoute(t *testing.T) {
 		"/api/v1/webhooks/subscriptions/create", "/api/v1/webhooks/subscriptions/update", "/api/v1/webhooks/subscriptions/get",
 		"/api/v1/webhooks/subscriptions/list", "/api/v1/webhooks/subscriptions/rotate-secret", "/api/v1/webhooks/subscriptions/delete",
 		"/api/v1/webhooks/subscriptions/test", "/api/v1/webhooks/deliveries/get", "/api/v1/webhooks/deliveries/list",
-		"/api/v1/webhooks/deliveries/replay",
+		"/api/v1/webhooks/deliveries/subscriptions/list", "/api/v1/webhooks/deliveries/replay",
 	} {
 		if requirement, ok := webhookHTTPRequirement(route); !ok || requirement.Resource == "" || requirement.Action == "" || requirement.Scope != platformauthz.ScopePrincipal {
 			t.Fatalf("route %q requirement = %+v, %v", route, requirement, ok)

@@ -19,9 +19,14 @@ import (
 type fakeStore struct {
 	Store
 	createFn     func(context.Context, Subscription) (Subscription, error)
+	listFn       func(context.Context, SubscriptionFilter) (Page[Subscription], error)
 	listActiveFn func(context.Context, *sqlx.Tx, string, string) ([]Subscription, error)
 	insertFn     func(context.Context, *sqlx.Tx, Delivery) (bool, error)
 	testInsertFn func(context.Context, Delivery, int64) (Delivery, error)
+}
+
+func (f *fakeStore) ListSubscriptions(ctx context.Context, filter SubscriptionFilter) (Page[Subscription], error) {
+	return f.listFn(ctx, filter)
 }
 
 func (f *fakeStore) CreateSubscription(ctx context.Context, value Subscription) (Subscription, error) {
@@ -162,6 +167,25 @@ func TestServiceRejectsApplicationWithoutTenantGrant(t *testing.T) {
 	_, err := service.ListSubscriptions(ctx, SubscriptionFilter{TenantID: "tenant-1", ApplicationID: "app-1"})
 	if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("ListSubscriptions() error = %v, want ErrForbidden", err)
+	}
+}
+
+func TestServiceListDeliverySubscriptionsForcesActiveStatus(t *testing.T) {
+	t.Parallel()
+	store := &fakeStore{listFn: func(_ context.Context, filter SubscriptionFilter) (Page[Subscription], error) {
+		if filter.Status != SubscriptionActive || filter.Search != "orders" || filter.Page != 2 || filter.PageSize != 50 {
+			t.Fatalf("filter = %+v", filter)
+		}
+		return Page[Subscription]{}, nil
+	}}
+	service := newTestService(t, store)
+	ctx := principal.WithContext(t.Context(), principal.Principal{ID: "service-1", Type: principal.TypeServiceAccount})
+
+	_, err := service.ListDeliverySubscriptions(ctx, SubscriptionFilter{
+		TenantID: "tenant-1", ApplicationID: "app-1", Status: SubscriptionDisabled, Search: "orders", Page: 2, PageSize: 50,
+	})
+	if err != nil {
+		t.Fatalf("ListDeliverySubscriptions() error = %v", err)
 	}
 }
 

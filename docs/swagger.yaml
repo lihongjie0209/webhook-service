@@ -144,6 +144,20 @@ definitions:
     - application_id
     - tenant_id
     type: object
+  httptransport.ListDeliverySubscriptionsRequest:
+    properties:
+      application_id:
+        type: string
+      page:
+        $ref: '#/definitions/httptransport.PageRequest'
+      search:
+        type: string
+      tenant_id:
+        type: string
+    required:
+    - application_id
+    - tenant_id
+    type: object
   httptransport.ListSubscriptionsRequest:
     properties:
       application_id:
@@ -467,6 +481,34 @@ paths:
       security:
       - Bearer: []
       summary: Replay a completed or dead webhook delivery
+      tags:
+      - webhook-deliveries
+  /api/v1/webhooks/deliveries/subscriptions/list:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Search and pagination
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httptransport.ListDeliverySubscriptionsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httptransport.Response'
+            - properties:
+                body:
+                  $ref: '#/definitions/httptransport.SubscriptionPageBody'
+              type: object
+      security:
+      - Bearer: []
+      summary: Search active subscriptions available to delivery history
       tags:
       - webhook-deliveries
   /api/v1/webhooks/subscriptions/create:

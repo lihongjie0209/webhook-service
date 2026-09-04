@@ -72,6 +72,7 @@ func NewServer(lc fx.Lifecycle, cfg config.Config, handler *Handler, authService
 	api.POST("/webhooks/subscriptions/test", handler.TestSubscription)
 	api.POST("/webhooks/deliveries/get", handler.GetDelivery)
 	api.POST("/webhooks/deliveries/list", handler.ListDeliveries)
+	api.POST("/webhooks/deliveries/subscriptions/list", handler.ListDeliverySubscriptions)
 	api.POST("/webhooks/deliveries/replay", handler.ReplayDelivery)
 	server := &http.Server{Addr: cfg.HTTP.Address, Handler: router, ReadTimeout: cfg.HTTP.ReadTimeout, WriteTimeout: cfg.HTTP.WriteTimeout, IdleTimeout: cfg.HTTP.IdleTimeout}
 	var listener net.Listener

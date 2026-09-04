@@ -235,6 +235,56 @@
                 }
             }
         },
+        "/api/v1/webhooks/deliveries/subscriptions/list": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webhook-deliveries"
+                ],
+                "summary": "Search active subscriptions available to delivery history",
+                "parameters": [
+                    {
+                        "description": "Search and pagination",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/httptransport.ListDeliverySubscriptionsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/httptransport.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "body": {
+                                            "$ref": "#/definitions/httptransport.SubscriptionPageBody"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/webhooks/subscriptions/create": {
             "post": {
                 "security": [
@@ -872,6 +922,27 @@
                     ]
                 },
                 "subscription_id": {
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "httptransport.ListDeliverySubscriptionsRequest": {
+            "type": "object",
+            "required": [
+                "application_id",
+                "tenant_id"
+            ],
+            "properties": {
+                "application_id": {
+                    "type": "string"
+                },
+                "page": {
+                    "$ref": "#/definitions/httptransport.PageRequest"
+                },
+                "search": {
                     "type": "string"
                 },
                 "tenant_id": {
