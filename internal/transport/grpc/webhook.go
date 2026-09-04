@@ -104,7 +104,7 @@ func (s *webhookServer) TestSubscription(ctx context.Context, request *webhookv1
 	if err := s.available(); err != nil {
 		return nil, err
 	}
-	value, err := s.service.TestSubscription(ctx, request.GetTenantId(), request.GetApplicationId(), request.GetId(), []byte(request.GetPayloadJson()))
+	value, err := s.service.TestSubscription(ctx, request.GetTenantId(), request.GetApplicationId(), request.GetId(), []byte(request.GetPayloadJson()), request.GetExpectedVersion())
 	if err != nil {
 		return nil, grpcError(err)
 	}

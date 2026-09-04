@@ -21,6 +21,7 @@ type fakeStore struct {
 	createFn     func(context.Context, Subscription) (Subscription, error)
 	listActiveFn func(context.Context, *sqlx.Tx, string, string) ([]Subscription, error)
 	insertFn     func(context.Context, *sqlx.Tx, Delivery) (bool, error)
+	testInsertFn func(context.Context, Delivery, int64) (Delivery, error)
 }
 
 func (f *fakeStore) CreateSubscription(ctx context.Context, value Subscription) (Subscription, error) {
@@ -33,6 +34,10 @@ func (f *fakeStore) ListActiveSubscriptionsTx(ctx context.Context, tx *sqlx.Tx, 
 
 func (f *fakeStore) InsertDeliveryTx(ctx context.Context, tx *sqlx.Tx, value Delivery) (bool, error) {
 	return f.insertFn(ctx, tx, value)
+}
+
+func (f *fakeStore) InsertTestDelivery(ctx context.Context, value Delivery, expectedVersion int64) (Delivery, error) {
+	return f.testInsertFn(ctx, value, expectedVersion)
 }
 
 func TestServiceCreateSubscriptionReturnsSecretOnce(t *testing.T) {
@@ -91,6 +96,40 @@ func TestServiceCreateSubscriptionRejectsDifferentTenant(t *testing.T) {
 	}
 	if called {
 		t.Fatal("CreateSubscription() wrote a cross-tenant subscription")
+	}
+}
+
+func TestServiceTestSubscriptionPassesVersionToAtomicStore(t *testing.T) {
+	var received Delivery
+	var receivedVersion int64
+	store := &fakeStore{testInsertFn: func(_ context.Context, value Delivery, expectedVersion int64) (Delivery, error) {
+		received = value
+		receivedVersion = expectedVersion
+		return value, nil
+	}}
+	service := newTestService(t, store)
+	service.newID = func() string { return "delivery-1" }
+	service.now = func() time.Time { return time.Unix(1_700_000_000, 0) }
+	ctx := principal.WithContext(t.Context(), principal.Principal{ID: "admin-1", Type: principal.TypeUser, TenantID: "tenant-1"})
+
+	value, err := service.TestSubscription(ctx, "tenant-1", "app-1", "subscription-1", []byte(`{"event":"test"}`), 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receivedVersion != 7 || received.SubscriptionID != "subscription-1" || value.ID != "delivery-1" {
+		t.Fatalf("TestSubscription() delivery = %+v, expected version = %d", received, receivedVersion)
+	}
+}
+
+func TestServiceTestSubscriptionRequiresExpectedVersion(t *testing.T) {
+	store := &fakeStore{testInsertFn: func(_ context.Context, value Delivery, _ int64) (Delivery, error) {
+		return value, nil
+	}}
+	service := newTestService(t, store)
+	ctx := principal.WithContext(t.Context(), principal.Principal{ID: "admin-1", Type: principal.TypeUser, TenantID: "tenant-1"})
+
+	if _, err := service.TestSubscription(ctx, "tenant-1", "app-1", "subscription-1", []byte(`{}`), 0); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("TestSubscription() error = %v, want ErrInvalid", err)
 	}
 }
 

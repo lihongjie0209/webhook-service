@@ -125,10 +125,11 @@ type RotateSecretBody struct {
 }
 
 type TestSubscriptionRequest struct {
-	ID            string          `json:"id" binding:"required"`
-	TenantID      string          `json:"tenant_id" binding:"required"`
-	ApplicationID string          `json:"application_id" binding:"required"`
-	PayloadJSON   json.RawMessage `json:"payload_json" binding:"required" swaggertype:"object"`
+	ID              string          `json:"id" binding:"required"`
+	TenantID        string          `json:"tenant_id" binding:"required"`
+	ApplicationID   string          `json:"application_id" binding:"required"`
+	PayloadJSON     json.RawMessage `json:"payload_json" binding:"required" swaggertype:"object"`
+	ExpectedVersion int64           `json:"expected_version" binding:"required,gt=0"`
 }
 
 type ListDeliveriesRequest struct {
@@ -303,7 +304,7 @@ func (h *Handler) TestSubscription(c *gin.Context) {
 	if !h.bind(c, &request) || !h.available(c) {
 		return
 	}
-	value, err := h.webhook.TestSubscription(c.Request.Context(), request.TenantID, request.ApplicationID, request.ID, request.PayloadJSON)
+	value, err := h.webhook.TestSubscription(c.Request.Context(), request.TenantID, request.ApplicationID, request.ID, request.PayloadJSON, request.ExpectedVersion)
 	if err != nil {
 		h.failWebhook(c, err)
 		return

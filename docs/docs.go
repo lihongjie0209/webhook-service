@@ -1062,6 +1062,7 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "application_id",
+                "expected_version",
                 "id",
                 "payload_json",
                 "tenant_id"
@@ -1069,6 +1070,9 @@ const docTemplate = `{
             "properties": {
                 "application_id": {
                     "type": "string"
+                },
+                "expected_version": {
+                    "type": "integer"
                 },
                 "id": {
                     "type": "string"

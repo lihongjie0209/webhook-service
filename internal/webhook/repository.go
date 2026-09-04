@@ -166,6 +166,39 @@ func (r *Repository) InsertDelivery(ctx context.Context, value Delivery) (Delive
 	return r.GetDelivery(ctx, value.TenantID, value.ApplicationID, value.ID)
 }
 
+func (r *Repository) InsertTestDelivery(ctx context.Context, value Delivery, expectedVersion int64) (Delivery, error) {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return Delivery{}, fmt.Errorf("begin test delivery insert: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	var current struct {
+		Version int64  `db:"version"`
+		Status  string `db:"status"`
+	}
+	query := r.db.Rebind(`SELECT version,status FROM webhook_subscriptions WHERE id=? AND tenant_id=? AND application_id=? AND deleted_at IS NULL FOR UPDATE`)
+	if err := tx.GetContext(ctx, &current, query, value.SubscriptionID, value.TenantID, value.ApplicationID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Delivery{}, ErrNotFound
+		}
+		return Delivery{}, fmt.Errorf("lock webhook subscription for test delivery: %w", err)
+	}
+	if current.Version != expectedVersion || current.Status != SubscriptionActive {
+		return Delivery{}, ErrVersionConflict
+	}
+	inserted, err := r.InsertDeliveryTx(ctx, tx, value)
+	if err != nil {
+		return Delivery{}, err
+	}
+	if !inserted {
+		return Delivery{}, ErrDuplicate
+	}
+	if err := tx.Commit(); err != nil {
+		return Delivery{}, fmt.Errorf("commit test delivery insert: %w", err)
+	}
+	return r.GetDelivery(ctx, value.TenantID, value.ApplicationID, value.ID)
+}
+
 func (r *Repository) GetDelivery(ctx context.Context, tenantID, applicationID, id string) (Delivery, error) {
 	var value Delivery
 	query := r.db.Rebind(`SELECT ` + deliveryColumns + ` FROM webhook_deliveries WHERE id=? AND tenant_id=? AND application_id=?`)

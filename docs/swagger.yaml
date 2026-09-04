@@ -265,6 +265,8 @@ definitions:
     properties:
       application_id:
         type: string
+      expected_version:
+        type: integer
       id:
         type: string
       payload_json:
@@ -273,6 +275,7 @@ definitions:
         type: string
     required:
     - application_id
+    - expected_version
     - id
     - payload_json
     - tenant_id

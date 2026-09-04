@@ -28,7 +28,7 @@ type Store interface {
 	ReplayDelivery(context.Context, string, string, string, int64, string) (Delivery, error)
 	ListActiveSubscriptionsTx(context.Context, *sqlx.Tx, string, string) ([]Subscription, error)
 	InsertDeliveryTx(context.Context, *sqlx.Tx, Delivery) (bool, error)
-	InsertDelivery(context.Context, Delivery) (Delivery, error)
+	InsertTestDelivery(context.Context, Delivery, int64) (Delivery, error)
 }
 
 type Service struct {
@@ -225,27 +225,24 @@ func (s *Service) ReplayDelivery(ctx context.Context, tenantID, applicationID, i
 	return s.store.ReplayDelivery(ctx, tenantID, applicationID, id, expectedVersion, actor)
 }
 
-func (s *Service) TestSubscription(ctx context.Context, tenantID, applicationID, id string, payloadJSON []byte) (Delivery, error) {
+func (s *Service) TestSubscription(ctx context.Context, tenantID, applicationID, id string, payloadJSON []byte, expectedVersion int64) (Delivery, error) {
 	actor, err := actorFromContext(ctx)
 	if err != nil {
 		return Delivery{}, err
 	}
-	if tenantID == "" || applicationID == "" || id == "" || !json.Valid(payloadJSON) || len(payloadJSON) > 1<<20 {
+	if tenantID == "" || applicationID == "" || id == "" || expectedVersion < 1 || !json.Valid(payloadJSON) || len(payloadJSON) > 1<<20 {
 		return Delivery{}, invalid("tenant ID, subscription ID, and a valid JSON payload up to 1 MiB are required")
 	}
 	if err := s.authorizeApplication(ctx, tenantID, applicationID); err != nil {
 		return Delivery{}, err
 	}
-	if _, err := s.store.GetSubscription(ctx, tenantID, applicationID, id); err != nil {
-		return Delivery{}, err
-	}
 	now := s.now()
 	deliveryID := s.newID()
-	return s.store.InsertDelivery(ctx, Delivery{
+	return s.store.InsertTestDelivery(ctx, Delivery{
 		ID: deliveryID, SubscriptionID: id, TenantID: tenantID, ApplicationID: applicationID, EventID: "test:" + deliveryID,
 		EventSubject: "platform.webhook.test.v1", Payload: append([]byte(nil), payloadJSON...), Status: DeliveryPending,
 		NextAttemptAt: now, Version: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: actor, UpdatedBy: actor,
-	})
+	}, expectedVersion)
 }
 
 type externalEnvelope struct {
